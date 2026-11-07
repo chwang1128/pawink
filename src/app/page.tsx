@@ -593,7 +593,10 @@ export default function FullMapAIPortal() {
           setStores(merged);
 
           const ids: string[] = Array.isArray(evalData.recommendedIds) ? evalData.recommendedIds : [];
-          setDisplayedStores(ids.map(id => merged.find(st => st.id === id)).filter((st): st is Store => !!st));
+          // 評估暫時失敗時保留原本顯示的最近三家，不要清空畫面
+          if (!evalData.keepNearest) {
+            setDisplayedStores(ids.map(id => merged.find(st => st.id === id)).filter((st): st is Store => !!st));
+          }
         }
       }
     } catch (err) {

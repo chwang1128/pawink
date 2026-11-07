@@ -91,13 +91,23 @@ export async function POST(req: Request) {
           reply: '抱歉，目前無法查詢店家的 Google 地圖資料，先為您列出距離最近的店家。',
           recommendedIds: [],
           evaluations: {},
+          keepNearest: true,
         });
       }
 
       // 回覆由伺服器組成，不直接採用模型的文字，避免被評論內容誘導出不當訊息
       const nameOf = (id: string) => candidates.find((c) => c.id === id)?.name || '';
-      const { evaluations, recommendedIds } = result;
+      const { evaluations, recommendedIds, groundedCount } = result;
       let reply: string;
+      if (groundedCount === 0) {
+        // Google 地圖工具一家都沒查到：不是「沒有符合的店」，而是暫時無法評估，前端保留最近的店家
+        return NextResponse.json({
+          reply: '抱歉，這次沒能從 Google 地圖取得店家資料，先為您列出距離最近的店家，可以點開查看評論。',
+          recommendedIds: [],
+          evaluations: {},
+          keepNearest: true,
+        });
+      }
       if (recommendedIds.length > 0) {
         const hasUnknownEssential = recommendedIds.some((id) =>
           evaluations[id].requirements.some((r) => r.isEssential && r.status === 'unknown'));
