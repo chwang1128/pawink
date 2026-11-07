@@ -79,6 +79,10 @@ export function extractJson(text: string): any | null {
 
 const stripPlacesPrefix = (id: unknown) => (typeof id === 'string' ? id.replace(/^places\//, '') : '');
 
+// 模型有時會把提示中的標記一起抄回來（例如「不關籠（必要）」），比對前先去掉括號註記與空白
+export const normalizeLabel = (label: unknown) =>
+  typeof label === 'string' ? label.replace(/[（(][^）)]*[）)]/g, '').replace(/\s+/g, '').trim() : '';
+
 // 從 grounding 來源整理出每個地點的 Google 地圖連結
 export function sourcesFromChunks(groundingChunks: any[]): Map<string, MapsSource[]> {
   const byPlace = new Map<string, MapsSource[]>();
@@ -108,7 +112,7 @@ export function buildStoreEvaluation(
     grounded,
     summary: grounded ? sanitizeSummary(parsed?.summary) : null,
     requirements: requirements.map((req) => {
-      const found = checks.find((x) => x?.label === req.label);
+      const found = checks.find((x) => normalizeLabel(x?.label) === normalizeLabel(req.label));
       const status: RequirementStatus = grounded && STATUSES.includes(found?.status) ? found.status : 'unknown';
       return { ...req, status };
     }),
@@ -147,10 +151,9 @@ async function evaluateOne(opts: {
 地址：${c.address}
 Google 地點 ID：${c.id}
 
-請先用 Google 地圖查詢這家店的資訊與顧客評論，再依查到的內容回答。
+第一步：一定要使用 Google 地圖工具，以「店名＋地址」查詢這家店的資訊與顧客評論。不可以只憑店名或地址推測。
 
-飼主的需求（已由系統整理，請勿增減或改名）：
-${requirements.length ? requirements.map((r) => `- ${r.label}${r.isEssential ? '（必要）' : ''}`).join('\n') : '- （沒有特別條件，只需簡述店家）'}
+需要判斷的項目（label 請原樣使用，不要加任何註記）：${JSON.stringify(requirements.map((r) => r.label))}
 
 規則：
 1. 每一項需求的 status："met"＝Google 地圖資訊明確支持；"not_met"＝明確顯示不符合；"unknown"＝查不到或不明確。沒有把握時一律 unknown。
@@ -205,19 +208,24 @@ export async function evaluateWithMapsGrounding(opts: {
   requirements: Requirement[];
   pet: PetContext;
 }): Promise<{ evaluations: Record<string, StoreEvaluation>; recommendedIds: string[]; groundedCount: number }> {
-  const settled = await Promise.allSettled(
-    opts.candidates.map((candidate) => evaluateOne({ ...opts, candidate })),
-  );
   const evaluations: Record<string, StoreEvaluation> = {};
-  settled.forEach((r, i) => {
-    const c = opts.candidates[i];
-    if (r.status === 'fulfilled') {
-      evaluations[c.id] = r.value;
-    } else {
-      console.error('[grounding] 評估失敗', c.id, (r.reason as any)?.message);
-      evaluations[c.id] = buildStoreEvaluation(c, opts.requirements, null, []);
-    }
-  });
+  const runBatch = async (batch: Candidate[]) => {
+    const settled = await Promise.allSettled(batch.map((candidate) => evaluateOne({ ...opts, candidate })));
+    settled.forEach((r, i) => {
+      const c = batch[i];
+      if (r.status === 'fulfilled') {
+        evaluations[c.id] = r.value;
+      } else {
+        console.error('[grounding] 評估失敗', c.id, (r.reason as any)?.message);
+        evaluations[c.id] = buildStoreEvaluation(c, opts.requirements, null, []);
+      }
+    });
+  };
+
+  await runBatch(opts.candidates);
+  // 模型有時沒有真的呼叫 Google 地圖工具（沒有來源），這些店重試一次
+  const retry = opts.candidates.filter((c) => !evaluations[c.id].grounded);
+  if (retry.length > 0) await runBatch(retry);
   const groundedCount = Object.values(evaluations).filter((e) => e.grounded).length;
   return { evaluations, recommendedIds: pickRecommendations(opts.candidates, evaluations), groundedCount };
 }
