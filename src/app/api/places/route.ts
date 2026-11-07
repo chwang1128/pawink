@@ -1,41 +1,39 @@
 import { NextResponse } from 'next/server';
+import { searchPlaces, photoProxyUrl, PlacesApiError } from '@/lib/places';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const rawKeyword = searchParams.get('keyword') || '寵物';
-  const lat = searchParams.get('lat') || '25.0330';
-  const lng = searchParams.get('lng') || '121.5434';
-  
-  const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || process.env.GOOGLE_MAPS_API_KEY || process.env.GEMINI_API_KEY;
+  const lat = Number(searchParams.get('lat') || '25.0330');
+  const lng = Number(searchParams.get('lng') || '121.5434');
 
-  if (!apiKey) {
-    return NextResponse.json({ results: [], error: "Missing API Key" });
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return NextResponse.json({ results: [], error: '座標格式錯誤' }, { status: 400 });
   }
 
   const cleanKeyword = rawKeyword.replace(/(狗狗|貓咪|\?|？|請問|我要找|想找)/g, '').trim() || '寵物';
 
   try {
-    // 🌟 將 radius 縮小為 1000 (1公里)，剛好完美貼合 15 倍放大的地圖視野！
-    // 這樣 20 筆資料就會高度密集地灑在你附近的街道上。
-    const searchUrl = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(cleanKeyword)}&location=${lat},${lng}&radius=1000&language=zh-TW&key=${apiKey}`;
-    const searchRes = await fetch(searchUrl);
-    const searchData = await searchRes.json();
+    // 半徑 1 公里，與地圖 15 倍放大的視野相符
+    const places = await searchPlaces(cleanKeyword, { lat, lng, radiusMeters: 1000, maxResults: 20 });
 
-    let results = searchData.results || [];
-    
-    results = results.map((place: any) => {
-      let photoUrl = null;
-      if (place.photos && place.photos.length > 0) {
-        photoUrl = `https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photoreference=${place.photos[0].photo_reference}&key=${apiKey}`;
-      }
-      return { ...place, photoUrl };
-    });
+    // 回傳格式沿用舊版 Places API 的欄位名稱，前端不需要改
+    const results = places.map((p) => ({
+      place_id: p.id,
+      name: p.name,
+      formatted_address: p.address,
+      geometry: { location: { lat: p.lat, lng: p.lng } },
+      rating: p.rating ?? undefined,
+      user_ratings_total: p.userRatingCount ?? undefined,
+      photoUrl: photoProxyUrl(p.photoName),
+    }));
 
     return NextResponse.json({ results });
-
   } catch (error: any) {
-    return NextResponse.json({ error: error.message, results: [] });
+    const status = error instanceof PlacesApiError ? error.status : 500;
+    console.error('[api/places]', error?.message);
+    return NextResponse.json({ error: error?.message || '搜尋失敗', results: [] }, { status: status >= 400 ? status : 500 });
   }
 }
