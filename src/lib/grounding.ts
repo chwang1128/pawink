@@ -180,7 +180,20 @@ ${requirements.length ? requirements.map((r) => `- ${r.label}${r.isEssential ? '
   const text = (cand?.content?.parts || []).map((p: any) => p?.text || '').join('');
   const parsed = extractJson(text);
   if (!parsed) console.error('[grounding] 無法解析模型輸出', c.id, text.slice(0, 200));
-  return buildStoreEvaluation(c, requirements, parsed, cand?.groundingMetadata?.groundingChunks || []);
+  const evaluation = buildStoreEvaluation(c, requirements, parsed, cand?.groundingMetadata?.groundingChunks || []);
+  // 只在 Vercel 預覽環境附上診斷資訊，正式站不回傳
+  if (process.env.VERCEL_ENV !== 'production') {
+    (evaluation as any).diag = {
+      finishReason: cand?.finishReason,
+      hasGroundingMetadata: !!cand?.groundingMetadata,
+      chunkCount: (cand?.groundingMetadata?.groundingChunks || []).length,
+      chunkPlaceIds: (cand?.groundingMetadata?.groundingChunks || []).map((x: any) => x?.maps?.placeId || Object.keys(x || {}).join('+')),
+      metadataKeys: Object.keys(cand?.groundingMetadata || {}),
+      textHead: text.slice(0, 160),
+      model: data?.modelVersion,
+    };
+  }
+  return evaluation;
 }
 
 // 每家店各自一個請求、同時送出：單店提示較單純，Google 地圖工具較穩定被呼叫，

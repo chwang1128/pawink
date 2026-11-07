@@ -99,6 +99,9 @@ export async function POST(req: Request) {
       const nameOf = (id: string) => candidates.find((c) => c.id === id)?.name || '';
       const { evaluations, recommendedIds, groundedCount } = result;
       let reply: string;
+      const diag = process.env.VERCEL_ENV !== 'production'
+        ? Object.fromEntries(Object.entries(evaluations).map(([id, e]: any) => [id, e.diag]))
+        : undefined;
       if (groundedCount === 0) {
         // Google 地圖工具一家都沒查到：不是「沒有符合的店」，而是暫時無法評估，前端保留最近的店家
         return NextResponse.json({
@@ -106,6 +109,7 @@ export async function POST(req: Request) {
           recommendedIds: [],
           evaluations: {},
           keepNearest: true,
+          diag,
         });
       }
       if (recommendedIds.length > 0) {
