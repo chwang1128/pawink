@@ -1,5 +1,9 @@
 import { NextResponse } from 'next/server';
-import { geocodeArea } from '@/lib/places';
+import { geocodeArea, getPlaceDetails, PLACE_ID_PATTERN, type PlaceDetails } from '@/lib/places';
+import { verifyChecks } from '@/lib/evidence';
+
+// AI 評估時最多取幾家候選店家的評論（每家一次 Place Details 呼叫，屬最高計費級別）
+const MAX_EVAL_CANDIDATES = 5;
 
 export const runtime = 'nodejs';
 
@@ -20,6 +24,7 @@ export async function POST(req: Request) {
       : '無';
 
     let systemPrompt = '';
+    let detailsById: Map<string, PlaceDetails> | null = null;
     
     if (!isEvaluationPhase) {
       // 階段 1：需求釐清階段
@@ -49,25 +54,72 @@ export async function POST(req: Request) {
 
     } else {
       // 階段 2：店家評估與推薦階段
-      const simplifiedStores = contextStores ? contextStores.map((s: any) => ({
-        id: s.id, name: s.name, address: s.address, rating: s.rating, features: s.aiSummary
-      })) : [];
+      // 取得候選店家的真實資料（Google 評論、店家簡介），交給模型依評論判斷是否符合需求。
+      const candidates: any[] = (Array.isArray(contextStores) ? contextStores : [])
+        .filter((s: any) => typeof s?.id === 'string' && PLACE_ID_PATTERN.test(s.id))
+        .slice(0, MAX_EVAL_CANDIDATES);
+
+      const settled = await Promise.allSettled(candidates.map((s) => getPlaceDetails(s.id)));
+      detailsById = new Map();
+      settled.forEach((r, i) => {
+        if (r.status === 'fulfilled') detailsById!.set(candidates[i].id, r.value);
+        else console.error('[api/chat] 店家詳細資料失敗', candidates[i].id, (r.reason as any)?.message);
+      });
+
+      const storesForModel = candidates
+        .filter((s) => detailsById!.has(s.id))
+        .map((s) => {
+          const d = detailsById!.get(s.id)!;
+          return {
+            id: s.id,
+            name: s.name,
+            address: s.address,
+            rating: s.rating ?? null,
+            editorialSummary: d.editorialSummary,
+            reviews: d.reviews.map((r, idx) => ({ index: idx, rating: r.rating, text: r.text })),
+          };
+        });
+
+      if (storesForModel.length === 0) {
+        return NextResponse.json({
+          reply: '抱歉，目前無法取得這些店家的詳細資料，請稍後再試一次。',
+          recommendedIds: [],
+          evaluations: {},
+        });
+      }
 
       systemPrompt = `你現在是 PetHub 的「專業寵物照護助理」。
-服務毛孩：${petProfile?.name || '毛孩'}
+服務毛孩：${petProfile?.name || '毛孩'} (${petProfile?.type === 'dog' ? '狗狗' : petProfile?.type === 'cat' ? '貓咪' : '毛孩'})
+品種：${petProfile?.breed || '未填寫'}
+特別註記：${petProfile?.notes || '無'}
 
-【任務指令：店家評估與卡片聯動】
-家長的需求已經確認。系統剛為你搜尋到以下周邊店家：
-${simplifiedStores.length > 0 ? JSON.stringify(simplifiedStores, null, 2) : '無'}
+【任務指令：依真實評論評估店家】
+家長的需求已經確認。以下是周邊店家，附上 Google 上的真實顧客評論與店家簡介：
+${JSON.stringify(storesForModel, null, 2)}
 
-1. 根據【對話歷史紀錄】中家長確認過的條件，從上方店家清單挑選最適合的推薦。
-2. 嚴格剔除不符合條件的店家。
-3. 【重要】你的回覆 (replyText) 必須「極度簡潔」，只要用一句話告訴家長你推薦了畫面上哪幾家店即可。絕對不要在對話中列出店家的特色、距離或營業時間！詳細原因保留給前端店家卡片展示。
+步驟：
+1. 從【對話歷史紀錄】整理出家長的需求清單 requirements（每項 2 到 8 個字，例如「不關籠」「可攜寵用餐」「接受大型犬」）。家長明確要求的標為 isEssential: true；毛孩檔案的特別註記若和這次服務相關也可以列入（isEssential: false）。最多 4 項。
+2. 對每家店、每一項需求，只能根據上面的評論與店家簡介判斷：
+   - "met"：有內容明確支持
+   - "not_met"：有內容明確顯示不符合
+   - "unknown"：評論沒有提到，或說法不明確。沒有證據時一律用 unknown，絕對不要猜測。
+   - 判斷為 met 或 not_met 時，quote 必須「逐字複製」評論或簡介中的一段原文（至少 6 個字，不可改寫、不可拼接多句、不可翻譯）。判斷為 unknown 時 quote 填 null。
+3. 每家店寫一句 summary（40 字以內），只能根據評論內容，不可加入評論沒有提到的事實。
+4. recommendedStoreIds：挑出最適合的最多 3 家。任何一項 isEssential 需求被判為 not_met 的店不可推薦；unknown 可以推薦。
+5. replyText 必須極度簡潔，只用一句話說你推薦了畫面上哪幾家；若有需求在評論中查不到，補一句請家長出發前向店家確認。不要列出店家特色、距離或營業時間。
 
 請回傳純 JSON 格式：
 {
-  "replyText": "極度簡潔的推薦文字...",
-  "recommendedStoreIds": ["符合條件的店家ID 1", "店家ID 2"]
+  "replyText": "...",
+  "requirements": [{ "label": "不關籠", "isEssential": true }],
+  "stores": [
+    {
+      "id": "店家ID",
+      "summary": "...",
+      "checks": [{ "label": "不關籠", "status": "met", "quote": "評論原文片段" }]
+    }
+  ],
+  "recommendedStoreIds": ["店家ID"]
 }`;
     }
 
@@ -103,10 +155,11 @@ ${simplifiedStores.length > 0 ? JSON.stringify(simplifiedStores, null, 2) : '無
     try {
       parsedResult = JSON.parse(rawText);
     } catch (e) {
+      // 格式異常時不推薦任何店家，避免把未評估的店當成推薦
       parsedResult = {
         action: 'chat',
         replyText: "AI 思考格式異常，請再試一次。",
-        recommendedStoreIds: contextStores?.map((s: any) => s.id) || []
+        recommendedStoreIds: []
       };
     }
 
@@ -137,9 +190,35 @@ ${simplifiedStores.length > 0 ? JSON.stringify(simplifiedStores, null, 2) : '無
         targetLocation
       });
     } else {
+      // 整理模型的判斷：每一句引文都要在真實評論中找得到，找不到就降為「未確認」
+      const requirements: { label: string; isEssential: boolean }[] = (Array.isArray(parsedResult.requirements) ? parsedResult.requirements : [])
+        .filter((r: any) => typeof r?.label === 'string' && r.label.trim())
+        .slice(0, 4)
+        .map((r: any) => ({ label: r.label.trim().slice(0, 16), isEssential: r.isEssential === true }));
+
+      const modelStores: any[] = Array.isArray(parsedResult.stores) ? parsedResult.stores : [];
+      const evaluations: Record<string, any> = {};
+      detailsById!.forEach((details, id) => {
+        const m = modelStores.find((s: any) => s?.id === id) || {};
+        evaluations[id] = {
+          details,
+          summary: typeof m.summary === 'string' && m.summary.trim() ? m.summary.trim().slice(0, 80) : null,
+          requirements: verifyChecks(requirements, m.checks, details),
+        };
+      });
+
+      // 只推薦有資料的候選店家，並排除任何「必要需求」經佐證為不符合的店
+      const recommendedIds: string[] = (Array.isArray(parsedResult.recommendedStoreIds) ? parsedResult.recommendedStoreIds : [])
+        .filter((id: any) => typeof id === 'string' && evaluations[id])
+        .filter((id: string) => !evaluations[id].requirements.some((c: any) => c.isEssential && c.status === 'not_met'))
+        .slice(0, 3);
+
       return NextResponse.json({
-        reply: parsedResult.replyText,
-        recommendedIds: parsedResult.recommendedStoreIds || []
+        reply: typeof parsedResult.replyText === 'string' && parsedResult.replyText.trim()
+          ? parsedResult.replyText
+          : 'AI 評估時發生格式異常，請再試一次。',
+        recommendedIds,
+        evaluations,
       });
     }
 
