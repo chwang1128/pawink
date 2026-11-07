@@ -20,15 +20,6 @@ interface PetProfile {
   vaccineLastDate: string; 
 }
 
-type RequirementStatus = 'met' | 'not_met' | 'unknown';
-
-// AI 依 Google 地圖資料（Grounding with Google Maps）判斷的需求狀態
-interface RequirementTag {
-  label: string;
-  isEssential: boolean;
-  status: RequirementStatus;
-}
-
 interface PlaceReview {
   text: string;
   rating: number | null;
@@ -63,12 +54,8 @@ interface Store {
   photoAttributions: { displayName: string; uri: string | null }[];
   distanceKm?: number;
   distanceText?: string;
-  // 以下由 AI 評估或點開店家時才填入
+  // 點開店家時才向 Google 取得
   details?: StoreDetails;
-  aiSummary?: string | null;
-  requirementsStatus: RequirementTag[];
-  // AI 判斷所依據的 Google 地圖來源；規定必須緊接在 AI 內容之後顯示
-  aiSources?: { title: string; uri: string }[];
 }
 
 const QUICK_FILTERS = [
@@ -152,7 +139,6 @@ export default function FullMapAIPortal() {
   const [displayedStores, setDisplayedStores] = useState<Store[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isAiTyping, setIsAiTyping] = useState(false); 
-  const [typingLabel, setTypingLabel] = useState('Gemini 思考中...');
   
   const [selectedDetailStore, setSelectedDetailStore] = useState<Store | null>(null);
   const [isDetailsLoading, setIsDetailsLoading] = useState(false);
@@ -484,12 +470,11 @@ export default function FullMapAIPortal() {
           photoAttributions: Array.isArray(place.photoAttributions) ? place.photoAttributions : [],
           distanceKm,
           distanceText: distanceKm < 1 ? `${Math.round(distanceKm * 1000)}m` : `${distanceKm.toFixed(1)}km`,
-          requirementsStatus: [],
         };
-      }).sort((a: Store, b: Store) => (a.distanceKm || 0) - (b.distanceKm || 0));
+      });
 
       setStores(allFetchedStores);
-      // 快速分類或「搜尋此區域」：直接顯示最近的三家；AI 對話流程會再經過評估後替換
+      // 卡片顯示 Google 依關鍵字相關性排出的前三家（已偏向搜尋中心附近）
       setDisplayedStores(showCards ? allFetchedStores.slice(0, 3) : []);
       return allFetchedStores;
     } catch (error: any) {
@@ -558,46 +543,10 @@ export default function FullMapAIPortal() {
            return;
         }
 
-        setTypingLabel('正在查詢 Google 地圖上的店家資料…');
-        const evalRes = await fetch('/api/chat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            prompt: text,
-            petProfile: petProfile,
-            history: [...newHistory.slice(1), { sender: 'ai', text: chatData.reply }].map(m => ({ 
-              role: m.sender === 'ai' ? 'model' : 'user', 
-              content: m.text 
-            })),
-            // 只送最近的幾家給 AI 評估（後端會逐家讀取 Google 評論）
-            contextStores: latestStores.slice(0, 5).map((st: Store) => ({ id: st.id, name: st.name, address: st.address, lat: st.lat, lng: st.lng })),
-            // 需求清單來自第一階段（只依對話產生），評估時不可改變
-            requirements: Array.isArray(chatData.requirements) ? chatData.requirements : [],
-            isEvaluationPhase: true
-          })
-        });
-
-        const evalData = await evalRes.json();
-        
-        if (evalData.reply) {
-          setMessages(prev => [...prev, { sender: 'ai', text: evalData.reply }]);
-          speakText(evalData.reply); 
-          
-          // 把評估結果（真實評論、AI 摘要、附出處的需求判斷）併回店家資料
-          const evaluations: Record<string, any> = evalData.evaluations || {};
-          const withEval = (st: Store): Store => {
-            const ev = evaluations[st.id];
-            return ev ? { ...st, aiSummary: ev.summary, requirementsStatus: ev.requirements || [], aiSources: ev.sources || [] } : st;
-          };
-          const merged = latestStores.map(withEval);
-          setStores(merged);
-
-          const ids: string[] = Array.isArray(evalData.recommendedIds) ? evalData.recommendedIds : [];
-          // 評估暫時失敗時保留原本顯示的最近三家，不要清空畫面
-          if (!evalData.keepNearest) {
-            setDisplayedStores(ids.map(id => merged.find(st => st.id === id)).filter((st): st is Store => !!st));
-          }
-        }
+        // 不再由 AI 判斷店家是否符合條件（Google 條款限制以地圖內容產生新內容）。
+        // 卡片顯示 Google 依關鍵字相關性排序的前三家，點開可看 Google 上的原始資料與評論。
+        const doneMsg = '已在地圖上標出相關的店家，點開卡片可以查看 Google 上的營業時間、電話與評論。';
+        setMessages(prev => [...prev, { sender: 'ai', text: doneMsg }]);
       }
     } catch (err) {
       const errorMsg = '請求發生錯誤，後端可能尚未準備好。';
@@ -605,7 +554,6 @@ export default function FullMapAIPortal() {
       speakText(errorMsg);
     } finally {
       setIsAiTyping(false);
-      setTypingLabel('Gemini 思考中...');
     }
   };
 
@@ -834,7 +782,7 @@ export default function FullMapAIPortal() {
                 <div className="flex justify-start">
                   <div className="p-4 rounded-[20px] max-w-[88%] bg-white ring-1 ring-[#E8DFD8] text-[#38312D] rounded-tl-sm flex items-center space-x-2">
                     <Sparkles className="w-4 h-4 text-[#B88746] animate-pulse" />
-                    <span className="text-sm font-medium animate-pulse">{typingLabel}</span>
+                    <span className="text-sm font-medium animate-pulse">Gemini 思考中...</span>
                   </div>
                 </div>
               )}
@@ -944,27 +892,6 @@ export default function FullMapAIPortal() {
               <div className="p-3 md:p-4 flex flex-col flex-1 relative justify-center overflow-hidden">
                 <h3 className="font-black text-[#38312D] text-sm md:text-base leading-tight line-clamp-1 pr-6 mb-1">{store.name}</h3>
                 
-                <div className="flex items-center space-x-1 my-1 flex-wrap gap-y-1">
-                  {store.requirementsStatus?.map((req, i) => (
-                    <span 
-                      key={i} 
-                      title={req.status === 'unknown' ? 'Google 評論中沒有提到，請向店家確認' : undefined}
-                      className={`text-[10px] font-extrabold px-1.5 py-0.5 rounded-md flex items-center ${
-                        req.status === 'met'
-                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/60'
-                          : req.status === 'not_met'
-                            ? 'bg-rose-50 text-rose-600 border border-rose-200/60'
-                            : 'bg-stone-100 text-stone-500 border border-stone-200'
-                      }`}
-                    >
-                      {req.status === 'met' && <CheckCircle2 className="w-2.5 h-2.5 mr-0.5" />}
-                      {req.status === 'not_met' && <XCircle className="w-2.5 h-2.5 mr-0.5" />}
-                      {req.status === 'unknown' && <AlertCircle className="w-2.5 h-2.5 mr-0.5" />}
-                      {req.label}{req.status === 'unknown' ? '？' : ''}
-                    </span>
-                  ))}
-                </div>
-
                 <p className="text-xs text-[#A67C52] flex items-center line-clamp-1 mt-1 font-medium">
                   <MapPin className="w-3 h-3 mr-1 text-[#B88746] shrink-0" />
                   <span className="truncate">{store.address}</span>
@@ -989,7 +916,7 @@ export default function FullMapAIPortal() {
             <div className="w-12 h-1.5 bg-[#D8C9BC] rounded-full"></div>
             <div className="flex items-center text-[10px] text-[#A67C52] font-bold mt-1">
               {isSheetExpanded ? <ChevronDown className="w-3 h-3 mr-0.5" /> : <ChevronUp className="w-3 h-3 mr-0.5" />}
-              <span>{isSheetExpanded ? '下滑縮小看雙針地圖' : '向上展開看完整 AI 分析'}</span>
+              <span>{isSheetExpanded ? '下滑縮小看雙針地圖' : '向上展開看營業時間與評論'}</span>
             </div>
           </div>
 
@@ -1077,57 +1004,6 @@ export default function FullMapAIPortal() {
                   </a>
                 </div>
               </div>
-
-              {(selectedDetailStore.aiSummary || selectedDetailStore.requirementsStatus.length > 0) && (
-                <div className="px-5 py-4">
-                  <div className="flex items-center space-x-2 mb-1">
-                    <div className="bg-[#F7EFE5] p-1 rounded-lg text-[#B88746]">
-                      <Sparkles className="w-3.5 h-3.5" />
-                    </div>
-                    <h3 className="text-xs md:text-sm font-black text-[#38312D]">AI 依 Google 地圖資料整理</h3>
-                  </div>
-                  <p className="text-[10px] text-[#A67C52] mb-2.5">以下由 AI 讀取 Google 地圖上的店家資訊與評論後整理，可能有遺漏，出發前請以店家說法為準。</p>
-
-                  {selectedDetailStore.aiSummary && (
-                    <div className="bg-[#FBF6EE] border border-[#E8DFD8] rounded-2xl p-3.5 text-xs md:text-sm text-[#4A423D] leading-relaxed font-semibold mb-3">
-                      {selectedDetailStore.aiSummary}
-                    </div>
-                  )}
-
-                  {selectedDetailStore.requirementsStatus.length > 0 && (
-                    <ul className="bg-white ring-1 ring-[#E8DFD8] rounded-2xl divide-y divide-[#F0E8DF] mb-3">
-                      {selectedDetailStore.requirementsStatus.map((req, i) => (
-                        <li key={i} className="flex items-center justify-between gap-2 px-3.5 py-2.5 text-xs">
-                          <span className="font-black text-[#38312D]">
-                            {req.label}
-                            {req.isEssential && <span className="ml-1.5 text-[10px] text-[#B88746] font-bold">必要</span>}
-                          </span>
-                          <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-md shrink-0 ${
-                            req.status === 'met' ? 'bg-emerald-50 text-emerald-700'
-                              : req.status === 'not_met' ? 'bg-rose-50 text-rose-600'
-                              : 'bg-stone-100 text-stone-500'
-                          }`}>
-                            {req.status === 'met' ? '資料顯示符合' : req.status === 'not_met' ? '資料顯示不符合' : '查不到，請向店家確認'}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-
-                  {/* Google 規定：Google 地圖來源必須緊接在 AI 內容之後，標示 Google Maps 並連到來源 */}
-                  {(selectedDetailStore.aiSources?.length ?? 0) > 0 && (
-                    <div className="text-[12px] leading-relaxed">
-                      <span className="text-[#6E5A4D] font-medium">資料來源：</span>
-                      {selectedDetailStore.aiSources!.map((src, i) => (
-                        <span key={i} className="inline-flex items-center mr-2">
-                          <a href={src.uri} target="_blank" rel="noopener noreferrer" className="underline text-[#4A423D] mr-1">{src.title}</a>
-                          <GoogleMapsAttribution />
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
 
               {selectedDetailStore.details && selectedDetailStore.details.reviews.length > 0 && (
                 <div className="px-5 pb-4">
