@@ -302,3 +302,22 @@ export function verifyPhotoUrl(name: string, exp: string | null, sig: string | n
   const given = Buffer.from(sig);
   return expected.length === given.length && timingSafeEqual(expected, given);
 }
+
+// ---- 店家詳細資料的存取憑證 ----
+// Place Details 含評論屬最高計費級別。只接受本站搜尋時簽發、一小時內有效的憑證，
+// 外部無法拿任意地點 ID 消耗我們的 Google 額度。簽章內容加上前綴，與照片網址的簽章互不通用。
+export function detailsToken(placeId: string): string {
+  const exp = Math.floor(Date.now() / 1000) + PHOTO_URL_TTL_SECONDS;
+  return `${exp}.${signPhoto(`details:${placeId}`, exp)}`;
+}
+
+export function verifyDetailsToken(placeId: string, token: string | null): boolean {
+  if (!PLACE_ID_PATTERN.test(placeId) || !token) return false;
+  const [exp, sig] = token.split('.');
+  if (!exp || !sig || !/^\d+$/.test(exp)) return false;
+  const expNum = Number(exp);
+  if (expNum < Math.floor(Date.now() / 1000)) return false;
+  const expected = Buffer.from(signPhoto(`details:${placeId}`, expNum));
+  const given = Buffer.from(sig);
+  return expected.length === given.length && timingSafeEqual(expected, given);
+}

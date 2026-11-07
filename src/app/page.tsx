@@ -52,6 +52,7 @@ interface Store {
   address: string;
   photoUrl: string;
   photoAttributions: { displayName: string; uri: string | null }[];
+  detailsToken: string;
   distanceKm?: number;
   distanceText?: string;
   // 點開店家時才向 Google 取得
@@ -97,8 +98,19 @@ const calculateAge = (birthday: string) => {
 // 推薦卡片只取搜尋點附近這個距離內的店家
 const CARD_RADIUS_KM = 3;
 
-// 今天是星期幾，對應 Google weekdayDescriptions 的索引（星期一為 0）
-const todayHoursIndex = () => (new Date().getDay() + 6) % 7;
+// 今天（台灣時間）的營業時間。Google 的 weekdayDescriptions 以星期一為第一筆；
+// 用台灣時區判斷星期幾，避免使用者裝置在其他時區時顯示成前一天或後一天。
+const TW_WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const todayHours = (weekdayHours: string[]): string | null => {
+  if (weekdayHours.length !== 7) return null;
+  const day = new Intl.DateTimeFormat('en-US', { weekday: 'short', timeZone: 'Asia/Taipei' }).format(new Date());
+  const idx = TW_WEEKDAYS.indexOf(day);
+  return idx >= 0 ? weekdayHours[idx] : null;
+};
+
+// 撥號連結：保留數字與 +，分機符號轉成撥號暫停（逗號）
+const telHref = (phone: string) =>
+  'tel:' + phone.replace(/(#|ext\.?|分機)/gi, ',').replace(/[^0-9+,]/g, '');
 
 // Google 規定的文字標示：不可翻譯、不可換行、不可改大小寫；字色 #5E5E5E、12–16px、Roboto 400
 const GoogleMapsAttribution = () => (
@@ -145,6 +157,7 @@ export default function FullMapAIPortal() {
   
   const [selectedDetailStore, setSelectedDetailStore] = useState<Store | null>(null);
   const [isDetailsLoading, setIsDetailsLoading] = useState(false);
+  const [expandedReviews, setExpandedReviews] = useState<Set<number>>(new Set());
   const [notice, setNotice] = useState<string | null>(null);
   // 年齡依「今天」計算，只在瀏覽器端算，避免伺服器預先產生的畫面日期不同造成 React hydration 錯誤
   const [hasMounted, setHasMounted] = useState(false);
@@ -471,6 +484,7 @@ export default function FullMapAIPortal() {
           address: place.formatted_address || '地址資訊未提供',
           photoUrl: place.photoUrl || defaultImg,
           photoAttributions: Array.isArray(place.photoAttributions) ? place.photoAttributions : [],
+          detailsToken: place.detailsToken || '',
           distanceKm,
           distanceText: distanceKm < 1 ? `${Math.round(distanceKm * 1000)}m` : `${distanceKm.toFixed(1)}km`,
         };
@@ -566,6 +580,7 @@ export default function FullMapAIPortal() {
 
   const openDetailModal = async (store: Store) => {
     setSelectedDetailStore(store);
+    setExpandedReviews(new Set());
     setIsSheetExpanded(false);
     if (window.innerWidth < 768) setIsAiBoxMinimized(true); 
     
@@ -577,7 +592,7 @@ export default function FullMapAIPortal() {
     if (!store.details) {
       setIsDetailsLoading(true);
       try {
-        const res = await fetch(`/api/place-details?id=${encodeURIComponent(store.id)}`);
+        const res = await fetch(`/api/place-details?id=${encodeURIComponent(store.id)}&token=${encodeURIComponent(store.detailsToken)}`);
         if (!res.ok) throw new Error(String(res.status));
         const { details } = await res.json();
         const update = (st: Store) => (st.id === store.id ? { ...st, details } : st);
@@ -881,6 +896,11 @@ export default function FullMapAIPortal() {
               <div className="relative w-[120px] md:w-[140px] h-full shrink-0">
                 <img src={store.photoUrl} alt={store.name} className="w-full h-full object-cover" />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent"></div>
+                {store.photoAttributions.length > 0 && (
+                  <span className="absolute top-1.5 left-1.5 right-1.5 text-[9px] leading-tight text-white/85 truncate drop-shadow">
+                    相片：{store.photoAttributions[0].displayName}
+                  </span>
+                )}
                 
                 <div className="absolute bottom-2 left-2 right-2 flex flex-col space-y-1">
                    <span className="bg-[#4D8B6F]/90 backdrop-blur-md text-white text-[10px] font-bold px-1.5 py-0.5 rounded-md flex items-center w-max">
@@ -977,6 +997,9 @@ export default function FullMapAIPortal() {
                   <MapPin className="w-4 h-4 mr-2.5 text-[#B88746] mt-0.5 shrink-0" />
                   <span className="leading-relaxed">{selectedDetailStore.address}</span>
                 </div>
+                <div className="flex justify-end -mt-1">
+                  <GoogleMapsAttribution />
+                </div>
                 {isDetailsLoading && !selectedDetailStore.details && (
                   <div className="text-xs text-[#A67C52] font-medium pl-6">正在讀取營業時間與 Google 評論…</div>
                 )}
@@ -987,7 +1010,7 @@ export default function FullMapAIPortal() {
                       <span>
                         {selectedDetailStore.details.openNow === true && <span className="text-[#4D8B6F] font-bold mr-1.5">營業中</span>}
                         {selectedDetailStore.details.openNow === false && <span className="text-rose-600 font-bold mr-1.5">休息中</span>}
-                        {selectedDetailStore.details.weekdayHours[todayHoursIndex()] || '未提供營業時間'}
+                        {todayHours(selectedDetailStore.details.weekdayHours) || '未提供營業時間'}
                       </span>
                     </div>
                     {selectedDetailStore.details.phone && (
@@ -1041,7 +1064,18 @@ export default function FullMapAIPortal() {
                             {r.rating !== null && `${r.rating} ★・`}{r.relativeTime}
                           </span>
                         </div>
-                        <p className="line-clamp-4">{r.text}</p>
+                        {/* 預設顯示四行，點一下展開全文（評論不得被截斷成片面內容） */}
+                        <p
+                          className={expandedReviews.has(i) ? '' : 'line-clamp-4 cursor-pointer'}
+                          onClick={() => setExpandedReviews(prev => new Set(prev).add(i))}
+                        >
+                          {r.text}
+                        </p>
+                        {!expandedReviews.has(i) && r.text.length > 90 && (
+                          <button type="button" onClick={() => setExpandedReviews(prev => new Set(prev).add(i))} className="text-[10px] font-bold text-[#B88746] mt-0.5">
+                            展開全文
+                          </button>
+                        )}
                         <div className="flex items-center gap-3 mt-1.5 text-[10px] text-[#A67C52]">
                           {r.translated && <span>由 Google 翻譯</span>}
                           {r.url && <a href={r.url} target="_blank" rel="noopener noreferrer" className="underline">在 Google 地圖查看原文</a>}
@@ -1072,7 +1106,7 @@ export default function FullMapAIPortal() {
 
               {selectedDetailStore.details?.phone ? (
                 <a 
-                  href={`tel:${selectedDetailStore.details.phone.replace(/[^0-9+]/g, '')}`}
+                  href={telHref(selectedDetailStore.details.phone)}
                   className="flex-[0.8] bg-[#F7F2EA] hover:bg-[#E8DFD8] text-[#38312D] font-black text-xs sm:text-sm py-3 rounded-2xl flex items-center justify-center transition-all active:scale-95"
                 >
                   <Phone className="w-3.5 h-3.5 mr-1 text-blue-600" />

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { searchPlaces, photoProxyUrl, PlacesApiError } from '@/lib/places';
+import { searchPlaces, photoProxyUrl, detailsToken, PlacesApiError } from '@/lib/places';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,6 +30,8 @@ export async function GET(req: Request) {
       user_ratings_total: p.userRatingCount ?? undefined,
       photoUrl: photoProxyUrl(p.photoName),
       photoAttributions: p.photoAttributions,
+      // 點開店家時向 /api/place-details 出示的憑證
+      detailsToken: detailsToken(p.id),
     }));
 
     return NextResponse.json({ results });
