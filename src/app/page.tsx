@@ -94,6 +94,9 @@ const calculateAge = (birthday: string) => {
   return `${ageYears} 歲${ageMonths > 0 ? ` ${ageMonths} 個月` : ''}`;
 };
 
+// 推薦卡片只取搜尋點附近這個距離內的店家
+const CARD_RADIUS_KM = 3;
+
 // 今天是星期幾，對應 Google weekdayDescriptions 的索引（星期一為 0）
 const todayHoursIndex = () => (new Date().getDay() + 6) % 7;
 
@@ -474,8 +477,12 @@ export default function FullMapAIPortal() {
       });
 
       setStores(allFetchedStores);
-      // 卡片顯示 Google 依關鍵字相關性排出的前三家（已偏向搜尋中心附近）
-      setDisplayedStores(showCards ? allFetchedStores.slice(0, 3) : []);
+      // 卡片：搜尋點 3 公里內的店家依 Google 的相關性排序取前三家；
+      // Google 的位置偏好不是硬性範圍，可能混入很遠的店，不足三家時用最近的補上
+      const nearby = allFetchedStores.filter(st => (st.distanceKm ?? 0) <= CARD_RADIUS_KM);
+      const byDistance = [...allFetchedStores].sort((a, b) => (a.distanceKm ?? 0) - (b.distanceKm ?? 0));
+      const cards = [...nearby, ...byDistance.filter(st => !nearby.includes(st))].slice(0, 3);
+      setDisplayedStores(showCards ? cards : []);
       return allFetchedStores;
     } catch (error: any) {
       console.error(error);
