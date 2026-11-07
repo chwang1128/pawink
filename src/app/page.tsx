@@ -252,7 +252,7 @@ export default function FullMapAIPortal() {
   };
 
   const [messages, setMessages] = useState<Array<{ sender: 'ai' | 'user'; text: string }>>([
-    { sender: 'ai', text: `您好！我是 PetHub AI 助理 🐾 已為您載入【${petProfile.name}】的專屬檔案。請告訴我您的需求，我將啟動 Google Gemini 大語言模型為您服務！` }
+    { sender: 'ai', text: `您好！我是 Pawink AI 助理 🐾 已為您載入【${petProfile.name}】的專屬檔案。請告訴我您的需求，我將啟動 Google Gemini 大語言模型為您服務！` }
   ]);
   
   const [inputQuery, setInputQuery] = useState('');
@@ -801,7 +801,7 @@ export default function FullMapAIPortal() {
             </div>
             
             <span className="font-black text-[#38312D] tracking-tight text-xl leading-none">
-              PetHub
+              Pawink
             </span>
           </div>
 

@@ -14,7 +14,7 @@ export default function MerchantDashboardApp() {
       <header className="px-6 py-4 bg-white border-b border-slate-100 flex justify-between items-center">
         <div className="flex items-center gap-2">
           {step !== 'dashboard' && <button onClick={() => setStep('dashboard')}><ChevronLeft className="w-5 h-5" /></button>}
-          <span className="font-bold text-slate-800">PetHub 店家中心</span>
+          <span className="font-bold text-slate-800">Pawink 店家中心</span>
         </div>
         <div className="flex gap-2">
           <button onClick={() => setStep('role')} className={`text-xs px-2.5 py-1 rounded-full ${step === 'role' ? 'bg-blue-600 text-white' : 'bg-slate-100'}`}>登入</button>
@@ -29,7 +29,7 @@ export default function MerchantDashboardApp() {
           <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center text-white text-3xl font-bold shadow-lg">🐾</div>
           <div className="text-center">
             <h2 className="text-2xl font-bold text-slate-800">讓更多毛孩家庭找到你的專業服務</h2>
-            <p className="text-xs text-slate-400 mt-2">加入 PetHub，輕鬆管理預約、會員與評價。</p>
+            <p className="text-xs text-slate-400 mt-2">加入 Pawink，輕鬆管理預約、會員與評價。</p>
           </div>
           <button onClick={() => setStep('form')} className="w-full py-4 bg-blue-600 text-white font-bold rounded-2xl shadow-lg">我是店家</button>
           <Link href="/" className="w-full py-4 border border-blue-600 text-blue-600 font-bold rounded-2xl text-center">我是毛孩家長</Link>

@@ -29,7 +29,7 @@ export async function POST(req: Request) {
     
     {
       // 需求釐清：判斷要繼續追問，還是可以開始搜尋
-      systemPrompt = `你現在是 PetHub 的「專業寵物照護助理」。
+      systemPrompt = `你現在是 Pawink 的「專業寵物照護助理」。
 服務毛孩：${petProfile?.name || '毛孩'} (${petProfile?.type === 'dog' ? '狗狗' : '貓咪'})
 品種：${petProfile?.breed || '未填寫'}
 特別註記：${petProfile?.notes || '無'}
