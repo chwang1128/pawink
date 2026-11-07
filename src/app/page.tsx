@@ -173,6 +173,8 @@ export default function FullMapAIPortal() {
   const [petId, setPetId] = useState<string | null>(null);
   const [authProviders, setAuthProviders] = useState<string[]>([]);
   const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
+  // 避免同一次登入重複搬遷（例如開發模式下 effect 執行兩次）
+  const migratingRef = useRef(false);
 
   useEffect(() => {
     fetch('/api/auth/enabled').then(r => r.json()).then(d => setAuthProviders(d.providers || [])).catch(() => {});
@@ -192,14 +194,19 @@ export default function FullMapAIPortal() {
         const res = await fetch('/api/pets');
         if (!res.ok) throw new Error(String(res.status));
         const { pets } = await res.json();
+        const guest = readGuestPet();
         if (pets.length > 0) {
           const { id, ...profile } = pets[0];
           setPetProfile(profile);
           setPetId(id);
+          // 帳號裡已經有寵物：這台裝置的暫存不自動合併，保留在裝置上並告知，避免使用者以為被覆蓋
+          if (guest && guest.name !== profile.name) {
+            showNotice(`已載入帳號裡的「${profile.name}」。這台裝置另外暫存了「${guest.name}」，沒有自動存進帳號。`);
+          }
           return;
         }
-        const guest = readGuestPet();
-        if (guest) {
+        if (guest && !migratingRef.current) {
+          migratingRef.current = true;
           const created = await fetch('/api/pets', {
             method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(guest),
           });

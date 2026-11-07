@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getCurrentUserId } from '@/lib/auth';
 import { parsePetInput, toProfile } from '@/lib/pet-input';
-import { createPet, listPets, MAX_PETS_PER_OWNER } from '@/lib/pets';
+import { createPet, listPets, MAX_PETS_PER_OWNER, isMissingOwnerError } from '@/lib/pets';
 
 export const dynamic = 'force-dynamic';
 
@@ -34,6 +34,7 @@ export async function POST(req: Request) {
     const pet = await createPet(userId, parsed.data);
     return NextResponse.json({ pet: toProfile(pet) }, { status: 201 });
   } catch (err: any) {
+    if (isMissingOwnerError(err)) return NextResponse.json({ error: '登入狀態已失效，請重新登入' }, { status: 401 });
     console.error('[api/pets] 新增失敗', err?.message);
     return NextResponse.json({ error: '暫時無法儲存寵物檔案' }, { status: 503 });
   }
