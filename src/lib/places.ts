@@ -136,8 +136,13 @@ export interface PlaceReview {
   rating: number | null;
   author: string;
   authorUri: string | null;
+  // Google 規定顯示評論時至少要顯示作者頭像
+  authorPhotoUri: string | null;
   relativeTime: string;
+  // 這則評論在 Google 地圖上的原文頁（必須讓使用者能點過去看）
   url: string | null;
+  // 檢舉這則評論的連結
+  flagUrl: string | null;
   // Google 自動翻譯成中文時為 true（原文是其他語言）
   translated: boolean;
 }
@@ -154,7 +159,8 @@ export interface PlaceDetails {
 }
 
 // 計費：reviews 屬於 Place Details Enterprise + Atmosphere SKU，是最貴的一級。
-// 只在使用者點開店家，或 AI 評估推薦候選時才呼叫，不對整批搜尋結果呼叫。
+// 只在使用者點開店家時呼叫，用來原樣顯示；評論不會送進我們自己的 AI 提示詞
+// （AI 評估改用 Gemini 的 Google 地圖工具，見 lib/grounding.ts）。
 const DETAIL_FIELDS = [
   'id',
   'nationalPhoneNumber',
@@ -189,8 +195,10 @@ export async function getPlaceDetails(placeId: string): Promise<PlaceDetails> {
       rating: isNum(r.rating) ? r.rating : null,
       author: r.authorAttribution?.displayName || 'Google 使用者',
       authorUri: r.authorAttribution?.uri || null,
+      authorPhotoUri: r.authorAttribution?.photoUri || null,
       relativeTime: r.relativePublishTimeDescription || '',
       url: typeof r.googleMapsUri === 'string' ? r.googleMapsUri : null,
+      flagUrl: typeof r.flagContentUri === 'string' ? r.flagContentUri : null,
       translated:
         !!r.originalText?.languageCode && !!r.text?.languageCode && r.originalText.languageCode !== r.text.languageCode,
     }));

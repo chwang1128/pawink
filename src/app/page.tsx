@@ -22,20 +22,11 @@ interface PetProfile {
 
 type RequirementStatus = 'met' | 'not_met' | 'unknown';
 
-// 每一項需求的判斷都附上出處；後端已確認引文確實出自 Google 評論或店家簡介
+// AI 依 Google 地圖資料（Grounding with Google Maps）判斷的需求狀態
 interface RequirementTag {
   label: string;
   isEssential: boolean;
   status: RequirementStatus;
-  evidence: {
-    quote: string;
-    sourceType: 'review' | 'editorial';
-    author: string | null;
-    rating: number | null;
-    relativeTime: string | null;
-    url: string | null;
-    translated: boolean;
-  } | null;
 }
 
 interface PlaceReview {
@@ -43,8 +34,10 @@ interface PlaceReview {
   rating: number | null;
   author: string;
   authorUri: string | null;
+  authorPhotoUri: string | null;
   relativeTime: string;
   url: string | null;
+  flagUrl: string | null;
   translated: boolean;
 }
 
@@ -74,6 +67,8 @@ interface Store {
   details?: StoreDetails;
   aiSummary?: string | null;
   requirementsStatus: RequirementTag[];
+  // AI 判斷所依據的 Google 地圖來源；規定必須緊接在 AI 內容之後顯示
+  aiSources?: { title: string; uri: string }[];
 }
 
 const QUICK_FILTERS = [
@@ -115,6 +110,16 @@ const calculateAge = (birthday: string) => {
 // 今天是星期幾，對應 Google weekdayDescriptions 的索引（星期一為 0）
 const todayHoursIndex = () => (new Date().getDay() + 6) % 7;
 
+// Google 規定的文字標示：不可翻譯、不可換行、不可改大小寫；字色 #5E5E5E、12–16px、Roboto 400
+const GoogleMapsAttribution = () => (
+  <span
+    translate="no"
+    style={{ fontFamily: 'Roboto, Arial, sans-serif', fontWeight: 400, fontSize: 12, color: '#5E5E5E', whiteSpace: 'nowrap' }}
+  >
+    Google Maps
+  </span>
+);
+
 export default function FullMapAIPortal() {
   const [coins, setCoins] = useState(2000);
   const [isAiBoxMinimized, setIsAiBoxMinimized] = useState(false);
@@ -147,6 +152,7 @@ export default function FullMapAIPortal() {
   const [displayedStores, setDisplayedStores] = useState<Store[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isAiTyping, setIsAiTyping] = useState(false); 
+  const [typingLabel, setTypingLabel] = useState('Gemini 思考中...');
   
   const [selectedDetailStore, setSelectedDetailStore] = useState<Store | null>(null);
   const [isDetailsLoading, setIsDetailsLoading] = useState(false);
@@ -552,6 +558,7 @@ export default function FullMapAIPortal() {
            return;
         }
 
+        setTypingLabel('正在查詢 Google 地圖上的店家資料…');
         const evalRes = await fetch('/api/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -563,7 +570,9 @@ export default function FullMapAIPortal() {
               content: m.text 
             })),
             // 只送最近的幾家給 AI 評估（後端會逐家讀取 Google 評論）
-            contextStores: latestStores.slice(0, 5).map((st: Store) => ({ id: st.id, name: st.name, address: st.address, rating: st.rating })),
+            contextStores: latestStores.slice(0, 5).map((st: Store) => ({ id: st.id, name: st.name, address: st.address, lat: st.lat, lng: st.lng })),
+            // 需求清單來自第一階段（只依對話產生），評估時不可改變
+            requirements: Array.isArray(chatData.requirements) ? chatData.requirements : [],
             isEvaluationPhase: true
           })
         });
@@ -578,7 +587,7 @@ export default function FullMapAIPortal() {
           const evaluations: Record<string, any> = evalData.evaluations || {};
           const withEval = (st: Store): Store => {
             const ev = evaluations[st.id];
-            return ev ? { ...st, details: ev.details, aiSummary: ev.summary, requirementsStatus: ev.requirements || [] } : st;
+            return ev ? { ...st, aiSummary: ev.summary, requirementsStatus: ev.requirements || [], aiSources: ev.sources || [] } : st;
           };
           const merged = latestStores.map(withEval);
           setStores(merged);
@@ -593,6 +602,7 @@ export default function FullMapAIPortal() {
       speakText(errorMsg);
     } finally {
       setIsAiTyping(false);
+      setTypingLabel('Gemini 思考中...');
     }
   };
 
@@ -821,7 +831,7 @@ export default function FullMapAIPortal() {
                 <div className="flex justify-start">
                   <div className="p-4 rounded-[20px] max-w-[88%] bg-white ring-1 ring-[#E8DFD8] text-[#38312D] rounded-tl-sm flex items-center space-x-2">
                     <Sparkles className="w-4 h-4 text-[#B88746] animate-pulse" />
-                    <span className="text-sm font-medium animate-pulse">Gemini 思考中...</span>
+                    <span className="text-sm font-medium animate-pulse">{typingLabel}</span>
                   </div>
                 </div>
               )}
@@ -1065,34 +1075,27 @@ export default function FullMapAIPortal() {
                 </div>
               </div>
 
-              {selectedDetailStore.aiSummary && (
+              {(selectedDetailStore.aiSummary || selectedDetailStore.requirementsStatus.length > 0) && (
                 <div className="px-5 py-4">
-                  <div className="flex items-center space-x-2 mb-2">
+                  <div className="flex items-center space-x-2 mb-1">
                     <div className="bg-[#F7EFE5] p-1 rounded-lg text-[#B88746]">
                       <Sparkles className="w-3.5 h-3.5" />
                     </div>
-                    <h3 className="text-xs md:text-sm font-black text-[#38312D]">AI 評論摘要</h3>
+                    <h3 className="text-xs md:text-sm font-black text-[#38312D]">AI 依 Google 地圖資料整理</h3>
                   </div>
-                  <div className="bg-[#FBF6EE] border border-[#E8DFD8] rounded-2xl p-3.5 text-xs md:text-sm text-[#4A423D] leading-relaxed font-semibold">
-                    {selectedDetailStore.aiSummary}
-                  </div>
-                  <p className="text-[10px] text-[#A67C52] mt-1.5">
-                    由 AI 依下方 {selectedDetailStore.details?.reviews.length ?? 0} 則 Google 評論整理，可能有遺漏，請以實際評論為準。
-                  </p>
-                </div>
-              )}
+                  <p className="text-[10px] text-[#A67C52] mb-2.5">以下由 AI 讀取 Google 地圖上的店家資訊與評論後整理，可能有遺漏，出發前請以店家說法為準。</p>
 
-              {selectedDetailStore.requirementsStatus.length > 0 && (
-                <div className="px-5 pb-4">
-                  <h3 className="text-xs md:text-sm font-black text-[#38312D] mb-3 flex items-center">
-                    <span className="w-1.5 h-3.5 rounded-full bg-[#B88746] mr-2"></span>
-                    為 {petProfile.name} 核對的需求
-                  </h3>
-                  <div className="space-y-3">
-                    {selectedDetailStore.requirementsStatus.map((req, i) => (
-                      <div key={i} className="bg-white ring-1 ring-[#E8DFD8] rounded-2xl p-3.5 shadow-sm space-y-2">
-                        <div className="text-xs font-black text-[#38312D] flex items-center justify-between gap-2">
-                          <span>
+                  {selectedDetailStore.aiSummary && (
+                    <div className="bg-[#FBF6EE] border border-[#E8DFD8] rounded-2xl p-3.5 text-xs md:text-sm text-[#4A423D] leading-relaxed font-semibold mb-3">
+                      {selectedDetailStore.aiSummary}
+                    </div>
+                  )}
+
+                  {selectedDetailStore.requirementsStatus.length > 0 && (
+                    <ul className="bg-white ring-1 ring-[#E8DFD8] rounded-2xl divide-y divide-[#F0E8DF] mb-3">
+                      {selectedDetailStore.requirementsStatus.map((req, i) => (
+                        <li key={i} className="flex items-center justify-between gap-2 px-3.5 py-2.5 text-xs">
+                          <span className="font-black text-[#38312D]">
                             {req.label}
                             {req.isEssential && <span className="ml-1.5 text-[10px] text-[#B88746] font-bold">必要</span>}
                           </span>
@@ -1101,56 +1104,63 @@ export default function FullMapAIPortal() {
                               : req.status === 'not_met' ? 'bg-rose-50 text-rose-600'
                               : 'bg-stone-100 text-stone-500'
                           }`}>
-                            {req.status === 'met' ? '評論提到符合' : req.status === 'not_met' ? '評論提到不符合' : '未確認'}
+                            {req.status === 'met' ? '資料顯示符合' : req.status === 'not_met' ? '資料顯示不符合' : '查不到，請向店家確認'}
                           </span>
-                        </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
 
-                        {req.evidence ? (
-                          <div className="bg-[#FAF6F0] rounded-xl p-2.5 text-[11px] text-[#8C7A6B] font-medium leading-relaxed flex items-start space-x-1.5">
-                            <Quote className="w-3.5 h-3.5 text-[#B88746] shrink-0 mt-0.5 rotate-180" />
-                            <div className="flex-1 min-w-0">
-                              <span>「{req.evidence.quote}」</span>
-                              <span className="block text-[10px] text-[#B88746] font-bold mt-1">
-                                — {req.evidence.sourceType === 'review'
-                                  ? `${req.evidence.author || 'Google 使用者'} 的 Google 評論${req.evidence.relativeTime ? `（${req.evidence.relativeTime}）` : ''}${req.evidence.translated ? '・Google 翻譯' : ''}`
-                                  : 'Google 上的店家簡介'}
-                                {req.evidence.url && (
-                                  <a href={req.evidence.url} target="_blank" rel="noopener noreferrer" className="ml-1 underline">查看原文 ↗</a>
-                                )}
-                              </span>
-                            </div>
-                          </div>
-                        ) : (
-                          <p className="text-[11px] text-stone-500 font-medium pl-3 border-l-2 border-stone-200">
-                            Google 評論中沒有提到這一點，出發前建議先向店家確認。
-                          </p>
-                        )}
-                      </div>
-                    ))}
-                  </div>
+                  {/* Google 規定：Google 地圖來源必須緊接在 AI 內容之後，標示 Google Maps 並連到來源 */}
+                  {(selectedDetailStore.aiSources?.length ?? 0) > 0 && (
+                    <div className="text-[12px] leading-relaxed">
+                      <span className="text-[#6E5A4D] font-medium">資料來源：</span>
+                      {selectedDetailStore.aiSources!.map((src, i) => (
+                        <span key={i} className="inline-flex items-center mr-2">
+                          <a href={src.uri} target="_blank" rel="noopener noreferrer" className="underline text-[#4A423D] mr-1">{src.title}</a>
+                          <GoogleMapsAttribution />
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
 
               {selectedDetailStore.details && selectedDetailStore.details.reviews.length > 0 && (
                 <div className="px-5 pb-4">
-                  <h3 className="text-xs md:text-sm font-black text-[#38312D] mb-3 flex items-center">
-                    <span className="w-1.5 h-3.5 rounded-full bg-[#4D8B6F] mr-2"></span>
-                    Google 評論
-                  </h3>
+                  <div className="flex items-center justify-between mb-1">
+                    <h3 className="text-xs md:text-sm font-black text-[#38312D] flex items-center">
+                      <span className="w-1.5 h-3.5 rounded-full bg-[#4D8B6F] mr-2"></span>
+                      Google 評論
+                    </h3>
+                    <GoogleMapsAttribution />
+                  </div>
+                  <p className="text-[10px] text-[#8C7A6B] mb-2.5">
+                    依 Google 預設的相關性排序，顯示前 {Math.min(3, selectedDetailStore.details.reviews.length)} 則，未經篩選或改寫。
+                    <a href="https://support.google.com/contributionpolicy/answer/7422880" target="_blank" rel="noopener noreferrer" className="underline ml-1">Google 地圖評論政策</a>
+                  </p>
                   <div className="space-y-2.5">
                     {selectedDetailStore.details.reviews.slice(0, 3).map((r, i) => (
                       <div key={i} className="bg-white ring-1 ring-[#E8DFD8] rounded-2xl p-3 text-[11px] text-[#4A423D] leading-relaxed">
-                        <div className="flex items-center justify-between mb-1 gap-2">
-                          <span className="font-bold text-[#38312D] truncate">
+                        <div className="flex items-center gap-2 mb-1.5">
+                          {r.authorPhotoUri
+                            ? <img src={r.authorPhotoUri} alt="" referrerPolicy="no-referrer" className="w-6 h-6 rounded-full shrink-0" />
+                            : <span className="w-6 h-6 rounded-full bg-[#F0E8DF] shrink-0" />}
+                          <span className="font-bold text-[#38312D] truncate flex-1 min-w-0">
                             {r.authorUri
                               ? <a href={r.authorUri} target="_blank" rel="noopener noreferrer" className="hover:underline">{r.author}</a>
                               : r.author}
                           </span>
                           <span className="text-[10px] text-[#A67C52] shrink-0">
-                            {r.rating !== null && `${r.rating} ★・`}{r.relativeTime}{r.translated ? '・Google 翻譯' : ''}
+                            {r.rating !== null && `${r.rating} ★・`}{r.relativeTime}
                           </span>
                         </div>
                         <p className="line-clamp-4">{r.text}</p>
+                        <div className="flex items-center gap-3 mt-1.5 text-[10px] text-[#A67C52]">
+                          {r.translated && <span>由 Google 翻譯</span>}
+                          {r.url && <a href={r.url} target="_blank" rel="noopener noreferrer" className="underline">在 Google 地圖查看原文</a>}
+                          {r.flagUrl && <a href={r.flagUrl} target="_blank" rel="noopener noreferrer" className="underline">檢舉</a>}
+                        </div>
                       </div>
                     ))}
                   </div>

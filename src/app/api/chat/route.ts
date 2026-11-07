@@ -1,9 +1,19 @@
 import { NextResponse } from 'next/server';
-import { geocodeArea, getPlaceDetails, PLACE_ID_PATTERN, type PlaceDetails } from '@/lib/places';
-import { verifyChecks } from '@/lib/evidence';
+import { geocodeArea, PLACE_ID_PATTERN } from '@/lib/places';
+import { evaluateWithMapsGrounding, type Candidate, type Requirement } from '@/lib/grounding';
 
-// AI 評估時最多取幾家候選店家的評論（每家一次 Place Details 呼叫，屬最高計費級別）
+// AI 評估時最多送幾家候選店家給 Google 地圖工具
 const MAX_EVAL_CANDIDATES = 5;
+
+// 需求清單由第一階段（只看對話、不接觸任何 Google 地圖內容）產生，
+// 第二階段只能照這份清單判斷，評論內容無法改寫需求。
+function sanitizeRequirements(list: unknown): Requirement[] {
+  return (Array.isArray(list) ? list : [])
+    .filter((r: any) => typeof r?.label === 'string' && r.label.trim())
+    .map((r: any) => ({ label: r.label.trim().slice(0, 16), isEssential: r.isEssential === true }))
+    .filter((r, i, arr) => arr.findIndex((x) => x.label === r.label) === i)
+    .slice(0, 4);
+}
 
 export const runtime = 'nodejs';
 
@@ -24,7 +34,6 @@ export async function POST(req: Request) {
       : '無';
 
     let systemPrompt = '';
-    let detailsById: Map<string, PlaceDetails> | null = null;
     
     if (!isEvaluationPhase) {
       // 階段 1：需求釐清階段
@@ -43,84 +52,61 @@ export async function POST(req: Request) {
 * 若資訊【不足】，請親切提問。⚠️【一次只能問 1 個問題】，絕對不要同時問兩個重點！
 * 若資訊【充足】，請將 action 設為 "search"，並給予精準 keyword（例如「台中市西區 寵物友善餐廳」）。
 * 【跨區搜尋】：若家長有明確指定「其他縣市/地區」（例如：台中、信義區），請在 targetArea 填入完整地名（例如「台中市西區」、「台北市信義區」），系統會自行查詢座標，你不需要提供經緯度。如果沒指定地區或是說「附近」，targetArea 請設為 null。
+* 【需求清單】：action 為 "search" 時，從對話整理 requirements（最多 4 項，每項 2 到 8 個字，例如「不關籠」「可攜寵用餐」「接受大型犬」）。家長明確要求的標 isEssential: true；毛孩特別註記中和這次服務有關的可列入並標 false。地點、服務類型本身已經用在搜尋，不要列入。
 
 請回傳純 JSON 格式：
 {
   "action": "chat" 或 "search",
   "replyText": "你的回覆內容（一次只問一個問題）...",
   "keyword": "供 Google Maps 搜尋的關鍵字（若 action 為 search 時才填寫）",
-  "targetArea": "台中市西區" 或 null
+  "targetArea": "台中市西區" 或 null,
+  "requirements": [{ "label": "不關籠", "isEssential": true }]
 }`;
 
     } else {
-      // 階段 2：店家評估與推薦階段
-      // 取得候選店家的真實資料（Google 評論、店家簡介），交給模型依評論判斷是否符合需求。
-      const candidates: any[] = (Array.isArray(contextStores) ? contextStores : [])
-        .filter((s: any) => typeof s?.id === 'string' && PLACE_ID_PATTERN.test(s.id))
-        .slice(0, MAX_EVAL_CANDIDATES);
+      // 階段 2：用 Gemini 的 Google 地圖工具（Grounding with Google Maps）評估候選店家
+      const candidates: Candidate[] = (Array.isArray(contextStores) ? contextStores : [])
+        .filter((c: any) => typeof c?.id === 'string' && PLACE_ID_PATTERN.test(c.id)
+          && Number.isFinite(c?.lat) && Number.isFinite(c?.lng))
+        .slice(0, MAX_EVAL_CANDIDATES)
+        .map((c: any) => ({
+          id: c.id,
+          name: String(c.name || '').slice(0, 80),
+          address: String(c.address || '').slice(0, 120),
+          lat: c.lat,
+          lng: c.lng,
+        }));
+      const requirements = sanitizeRequirements(body.requirements);
 
-      const settled = await Promise.allSettled(candidates.map((s) => getPlaceDetails(s.id)));
-      detailsById = new Map();
-      settled.forEach((r, i) => {
-        if (r.status === 'fulfilled') detailsById!.set(candidates[i].id, r.value);
-        else console.error('[api/chat] 店家詳細資料失敗', candidates[i].id, (r.reason as any)?.message);
-      });
+      if (candidates.length === 0) {
+        return NextResponse.json({ reply: '抱歉，附近沒有可以評估的店家。', recommendedIds: [], evaluations: {} });
+      }
 
-      const storesForModel = candidates
-        .filter((s) => detailsById!.has(s.id))
-        .map((s) => {
-          const d = detailsById!.get(s.id)!;
-          return {
-            id: s.id,
-            name: s.name,
-            address: s.address,
-            rating: s.rating ?? null,
-            editorialSummary: d.editorialSummary,
-            reviews: d.reviews.map((r, idx) => ({ index: idx, rating: r.rating, text: r.text })),
-          };
-        });
-
-      if (storesForModel.length === 0) {
+      let result;
+      try {
+        result = await evaluateWithMapsGrounding({ apiKey, model: selectedModel, candidates, requirements, pet: petProfile || {} });
+      } catch (err: any) {
+        console.error('[api/chat] Maps grounding 失敗', err?.message);
         return NextResponse.json({
-          reply: '抱歉，目前無法取得這些店家的詳細資料，請稍後再試一次。',
+          reply: '抱歉，目前無法查詢店家的 Google 地圖資料，先為您列出距離最近的店家。',
           recommendedIds: [],
           evaluations: {},
         });
       }
 
-      systemPrompt = `你現在是 PetHub 的「專業寵物照護助理」。
-服務毛孩：${petProfile?.name || '毛孩'} (${petProfile?.type === 'dog' ? '狗狗' : petProfile?.type === 'cat' ? '貓咪' : '毛孩'})
-品種：${petProfile?.breed || '未填寫'}
-特別註記：${petProfile?.notes || '無'}
-
-【任務指令：依真實評論評估店家】
-家長的需求已經確認。以下是周邊店家，附上 Google 上的真實顧客評論與店家簡介：
-${JSON.stringify(storesForModel, null, 2)}
-
-步驟：
-1. 從【對話歷史紀錄】整理出家長的需求清單 requirements（每項 2 到 8 個字，例如「不關籠」「可攜寵用餐」「接受大型犬」）。家長明確要求的標為 isEssential: true；毛孩檔案的特別註記若和這次服務相關也可以列入（isEssential: false）。最多 4 項。
-2. 對每家店、每一項需求，只能根據上面的評論與店家簡介判斷：
-   - "met"：有內容明確支持
-   - "not_met"：有內容明確顯示不符合
-   - "unknown"：評論沒有提到，或說法不明確。沒有證據時一律用 unknown，絕對不要猜測。
-   - 判斷為 met 或 not_met 時，quote 必須「逐字複製」評論或簡介中的一段原文（至少 6 個字，不可改寫、不可拼接多句、不可翻譯）。判斷為 unknown 時 quote 填 null。
-3. 每家店寫一句 summary（40 字以內），只能根據評論內容，不可加入評論沒有提到的事實。
-4. recommendedStoreIds：挑出最適合的最多 3 家。任何一項 isEssential 需求被判為 not_met 的店不可推薦；unknown 可以推薦。
-5. replyText 必須極度簡潔，只用一句話說你推薦了畫面上哪幾家；若有需求在評論中查不到，補一句請家長出發前向店家確認。不要列出店家特色、距離或營業時間。
-
-請回傳純 JSON 格式：
-{
-  "replyText": "...",
-  "requirements": [{ "label": "不關籠", "isEssential": true }],
-  "stores": [
-    {
-      "id": "店家ID",
-      "summary": "...",
-      "checks": [{ "label": "不關籠", "status": "met", "quote": "評論原文片段" }]
-    }
-  ],
-  "recommendedStoreIds": ["店家ID"]
-}`;
+      // 回覆由伺服器組成，不直接採用模型的文字，避免被評論內容誘導出不當訊息
+      const nameOf = (id: string) => candidates.find((c) => c.id === id)?.name || '';
+      const { evaluations, recommendedIds } = result;
+      let reply: string;
+      if (recommendedIds.length > 0) {
+        const hasUnknownEssential = recommendedIds.some((id) =>
+          evaluations[id].requirements.some((r) => r.isEssential && r.status === 'unknown'));
+        reply = `依 Google 地圖上的資料，為您推薦 ${recommendedIds.map(nameOf).join('、')}。`
+          + (hasUnknownEssential ? '部分條件在 Google 地圖資料中查不到，出發前建議先向店家確認。' : '');
+      } else {
+        reply = '依 Google 地圖上的資料，附近沒有找到明確符合條件的店家。可以換個條件或地區再試試看。';
+      }
+      return NextResponse.json({ reply, recommendedIds, evaluations });
     }
 
     const finalPrompt = `${systemPrompt}\n\n【對話歷史紀錄】\n${historyText}\n\n【家長最新訊息】\n${prompt}`;
@@ -187,38 +173,8 @@ ${JSON.stringify(storesForModel, null, 2)}
         action: parsedResult.action || 'chat',
         reply: parsedResult.replyText,
         keyword: parsedResult.keyword || '',
-        targetLocation
-      });
-    } else {
-      // 整理模型的判斷：每一句引文都要在真實評論中找得到，找不到就降為「未確認」
-      const requirements: { label: string; isEssential: boolean }[] = (Array.isArray(parsedResult.requirements) ? parsedResult.requirements : [])
-        .filter((r: any) => typeof r?.label === 'string' && r.label.trim())
-        .slice(0, 4)
-        .map((r: any) => ({ label: r.label.trim().slice(0, 16), isEssential: r.isEssential === true }));
-
-      const modelStores: any[] = Array.isArray(parsedResult.stores) ? parsedResult.stores : [];
-      const evaluations: Record<string, any> = {};
-      detailsById!.forEach((details, id) => {
-        const m = modelStores.find((s: any) => s?.id === id) || {};
-        evaluations[id] = {
-          details,
-          summary: typeof m.summary === 'string' && m.summary.trim() ? m.summary.trim().slice(0, 80) : null,
-          requirements: verifyChecks(requirements, m.checks, details),
-        };
-      });
-
-      // 只推薦有資料的候選店家，並排除任何「必要需求」經佐證為不符合的店
-      const recommendedIds: string[] = (Array.isArray(parsedResult.recommendedStoreIds) ? parsedResult.recommendedStoreIds : [])
-        .filter((id: any) => typeof id === 'string' && evaluations[id])
-        .filter((id: string) => !evaluations[id].requirements.some((c: any) => c.isEssential && c.status === 'not_met'))
-        .slice(0, 3);
-
-      return NextResponse.json({
-        reply: typeof parsedResult.replyText === 'string' && parsedResult.replyText.trim()
-          ? parsedResult.replyText
-          : 'AI 評估時發生格式異常，請再試一次。',
-        recommendedIds,
-        evaluations,
+        targetLocation,
+        requirements: parsedResult.action === 'search' ? sanitizeRequirements(parsedResult.requirements) : []
       });
     }
 
