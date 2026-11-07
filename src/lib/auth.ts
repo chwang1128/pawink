@@ -40,8 +40,14 @@ export const authOptions: NextAuthOptions = {
   },
 };
 
-// 取得目前登入者的 ID；未登入回傳 null
+// 取得目前登入者的 ID；未登入、或登入功能尚未設定（缺 NEXTAUTH_SECRET）時回傳 null
 export async function getCurrentUserId(): Promise<string | null> {
-  const session = await getServerSession(authOptions);
-  return ((session?.user as any)?.id as string | undefined) ?? null;
+  if (!process.env.NEXTAUTH_SECRET) return null;
+  try {
+    const session = await getServerSession(authOptions);
+    return ((session?.user as any)?.id as string | undefined) ?? null;
+  } catch (err: any) {
+    console.error('[auth] 讀取登入狀態失敗', err?.message);
+    return null;
+  }
 }
