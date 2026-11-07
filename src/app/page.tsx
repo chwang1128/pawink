@@ -1,10 +1,12 @@
 'use client';
 import React, { useState, useEffect, useRef } from 'react';
+import { useSession, signIn, signOut } from 'next-auth/react';
 import { 
   Quote, PawPrint, Sparkles, Send, MapPin, 
   X, Coins, Star, RefreshCcw, Search, ChevronRight,
   Clock, Phone, Navigation, Map, MessageCircle, Globe, ChevronUp, ChevronDown,
   Edit3, Heart, AlertCircle, Pill, Syringe, Activity, ExternalLink, CheckCircle2, XCircle, FileText, LocateFixed, Mic
+  , LogIn, LogOut
 } from 'lucide-react';
 
 interface PetProfile {
@@ -122,6 +124,27 @@ const GoogleMapsAttribution = () => (
   </span>
 );
 
+// 未登入時，寵物檔案暫存在這台裝置的瀏覽器；登入後會搬進帳號
+const GUEST_PET_KEY = 'pethub.guestPet.v1';
+const readGuestPet = (): PetProfile | null => {
+  try {
+    const raw = window.localStorage.getItem(GUEST_PET_KEY);
+    return raw ? (JSON.parse(raw) as PetProfile) : null;
+  } catch {
+    return null;
+  }
+};
+const writeGuestPet = (p: PetProfile | null) => {
+  try {
+    if (p) window.localStorage.setItem(GUEST_PET_KEY, JSON.stringify(p));
+    else window.localStorage.removeItem(GUEST_PET_KEY);
+  } catch {
+    // 瀏覽器不允許儲存時（例如無痕模式），只在本次瀏覽中保留
+  }
+};
+
+const PROVIDER_LABEL: Record<string, string> = { line: '使用 LINE 登入', google: '使用 Google 登入' };
+
 export default function FullMapAIPortal() {
   const [coins, setCoins] = useState(2000);
   const [isAiBoxMinimized, setIsAiBoxMinimized] = useState(false);
@@ -144,6 +167,82 @@ export default function FullMapAIPortal() {
   });
   const [isPetModalOpen, setIsPetModalOpen] = useState(false);
   const [tempProfile, setPetTempProfile] = useState<PetProfile>(petProfile);
+
+  // ---- 帳號與寵物檔案存檔 ----
+  const { data: session, status: authStatus } = useSession();
+  const [petId, setPetId] = useState<string | null>(null);
+  const [authProviders, setAuthProviders] = useState<string[]>([]);
+  const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/auth/enabled').then(r => r.json()).then(d => setAuthProviders(d.providers || [])).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (authStatus === 'unauthenticated') {
+      const guest = readGuestPet();
+      if (guest) setPetProfile(guest);
+      setPetId(null);
+    }
+    if (authStatus !== 'authenticated') return;
+
+    // 登入後：讀帳號裡的寵物；帳號還沒有寵物、但這台裝置有暫存的，就搬進帳號
+    (async () => {
+      try {
+        const res = await fetch('/api/pets');
+        if (!res.ok) throw new Error(String(res.status));
+        const { pets } = await res.json();
+        if (pets.length > 0) {
+          const { id, ...profile } = pets[0];
+          setPetProfile(profile);
+          setPetId(id);
+          return;
+        }
+        const guest = readGuestPet();
+        if (guest) {
+          const created = await fetch('/api/pets', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(guest),
+          });
+          if (created.ok) {
+            const { pet } = await created.json();
+            const { id, ...profile } = pet;
+            setPetProfile(profile);
+            setPetId(id);
+            writeGuestPet(null);
+            showNotice(`已把「${profile.name}」的檔案存進你的帳號`);
+          }
+        }
+      } catch {
+        showNotice('暫時無法讀取帳號裡的寵物檔案');
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authStatus]);
+
+  // 儲存寵物檔案：登入時存進帳號，未登入時暫存在這台裝置
+  const persistPetProfile = async (profile: PetProfile) => {
+    if (authStatus !== 'authenticated') {
+      writeGuestPet(profile);
+      showNotice(authProviders.length > 0 ? '已暫存在這台裝置。登入後即可存進帳號，換裝置也看得到。' : '已暫存在這台裝置。');
+      return;
+    }
+    try {
+      const res = await fetch(petId ? `/api/pets/${petId}` : '/api/pets', {
+        method: petId ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(profile),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        showNotice(data.error || '儲存失敗，請稍後再試');
+        return;
+      }
+      setPetId(data.pet.id);
+      showNotice('已存進你的帳號');
+    } catch {
+      showNotice('儲存失敗，請檢查網路後再試');
+    }
+  };
 
   const [messages, setMessages] = useState<Array<{ sender: 'ai' | 'user'; text: string }>>([
     { sender: 'ai', text: `您好！我是 PetHub AI 助理 🐾 已為您載入【${petProfile.name}】的專屬檔案。請告訴我您的需求，我將啟動 Google Gemini 大語言模型為您服務！` }
@@ -610,6 +709,7 @@ export default function FullMapAIPortal() {
   const handleSavePetProfile = () => {
     setPetProfile(tempProfile);
     setIsPetModalOpen(false);
+    persistPetProfile(tempProfile);
     
     let medIntervalDays = 30; 
     let medDesc = "每月投藥的驅蟲預防藥";
@@ -732,6 +832,55 @@ export default function FullMapAIPortal() {
             </div>
             <Edit3 className="w-3.5 h-3.5 text-[#B88746] ml-1 opacity-70 group-hover:opacity-100" />
           </button>
+
+          {/* 帳號：已登入顯示頭像與登出；未登入且已設定登入方式時顯示登入 */}
+          {(authStatus === 'authenticated' || authProviders.length > 0) && (
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setIsAccountMenuOpen(o => !o)}
+                aria-haspopup="menu"
+                aria-expanded={isAccountMenuOpen}
+                className={`${glassmorphism} rounded-full flex items-center justify-center h-9 md:h-10 ${authStatus === 'authenticated' ? 'w-9 md:w-10 p-0.5' : 'px-3.5 text-xs md:text-sm font-black text-[#4A423D] hover:text-[#B88746]'}`}
+              >
+                {authStatus === 'authenticated'
+                  ? (session?.user?.image
+                      ? <img src={session.user.image} alt="我的帳號" referrerPolicy="no-referrer" className="w-full h-full rounded-full object-cover" />
+                      : <span className="w-full h-full rounded-full bg-[#F0E8DF] flex items-center justify-center text-sm font-black text-[#B88746]">{(session?.user?.name || '我').slice(0, 1)}</span>)
+                  : <><LogIn className="w-4 h-4 mr-1" />登入</>}
+              </button>
+              {isAccountMenuOpen && (
+                <div role="menu" className="absolute right-0 mt-2 w-56 bg-[#FFFDF9] rounded-2xl shadow-xl ring-1 ring-[#E8DFD8] p-2 z-50">
+                  {authStatus === 'authenticated' ? (
+                    <>
+                      <div className="px-3 py-2 text-xs text-[#6E5A4D]">
+                        <div className="font-black text-[#38312D] text-sm truncate">{session?.user?.name || '已登入'}</div>
+                        {session?.user?.email && <div className="truncate">{session.user.email}</div>}
+                      </div>
+                      <button type="button" role="menuitem" onClick={() => signOut()} className="w-full flex items-center px-3 py-2.5 rounded-xl text-sm font-bold text-[#4A423D] hover:bg-[#F7F2EA]">
+                        <LogOut className="w-4 h-4 mr-2" />登出
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <p className="px-3 py-2 text-xs text-[#6E5A4D]">登入後，毛孩檔案會存進帳號，換裝置也看得到。</p>
+                      {authProviders.map(p => (
+                        <button
+                          key={p}
+                          type="button"
+                          role="menuitem"
+                          onClick={() => signIn(p)}
+                          className={`w-full mt-1 px-3 py-2.5 rounded-xl text-sm font-black ${p === 'line' ? 'bg-[#06C755] text-white hover:bg-[#05b34c]' : 'bg-white ring-1 ring-[#E8DFD8] text-[#38312D] hover:bg-[#F7F2EA]'}`}
+                        >
+                          {PROVIDER_LABEL[p] || p}
+                        </button>
+                      ))}
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           <div className={`${glassmorphism} px-3.5 py-2 md:px-4 md:py-2.5 rounded-full text-xs md:text-sm font-black text-[#B88746] flex items-center space-x-1.5 bg-[#FFFDF9]`}>
             <Coins className="w-4 h-4 text-[#C59B63]" />
@@ -1318,6 +1467,11 @@ export default function FullMapAIPortal() {
               </div>
             </div>
 
+            {authStatus !== 'authenticated' && authProviders.length > 0 && (
+              <p className="px-6 pt-3 text-[11px] text-[#A67C52] bg-[#FFFDF9]">
+                目前未登入，檔案只會存在這台裝置。按右上角「登入」即可存進帳號。
+              </p>
+            )}
             <div className="px-6 py-4 border-t border-[#E8DFD8] flex space-x-3 shrink-0 bg-[#FFFDF9]">
               <button
                 onClick={() => setIsPetModalOpen(false)}
