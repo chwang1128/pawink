@@ -1,19 +1,27 @@
 // Google Places API (New) 的後端共用函式。只能在伺服器端（API route）使用。
 // 文件：https://developers.google.com/maps/documentation/places/web-service/text-search
 
+import { createHmac, timingSafeEqual } from 'crypto';
+
 const PLACES_BASE = 'https://places.googleapis.com/v1';
 
 // 伺服器端專用金鑰。建議在 Vercel 另設 GOOGLE_MAPS_SERVER_KEY（不加 NEXT_PUBLIC_ 前綴，
 // 不會被打包進瀏覽器），並在 Google Cloud 限制為只能呼叫 Places API (New)。
-// 未設定時退回原本的 NEXT_PUBLIC_GOOGLE_MAPS_API_KEY，讓既有部署不中斷。
+// 未設定時退回原本的 NEXT_PUBLIC_GOOGLE_MAPS_API_KEY，讓既有部署不中斷，但會在 log 留警告：
+// 瀏覽器用的金鑰應設網址（referrer）限制，而有網址限制的金鑰無法從伺服器呼叫 Places API。
+let warnedFallback = false;
 export function getServerMapsKey(): string | undefined {
-  return (
-    process.env.GOOGLE_MAPS_SERVER_KEY ||
-    process.env.GOOGLE_MAPS_API_KEY ||
-    process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
-  );
+  const serverKey = process.env.GOOGLE_MAPS_SERVER_KEY || process.env.GOOGLE_MAPS_API_KEY;
+  if (serverKey) return serverKey;
+  const publicKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+  if (publicKey && !warnedFallback) {
+    console.warn('[places] 未設定 GOOGLE_MAPS_SERVER_KEY，暫用瀏覽器端金鑰呼叫 Places API');
+    warnedFallback = true;
+  }
+  return publicKey;
 }
 
+// 上游（Google）錯誤。status 保留 Google 回的狀態碼，只寫進 log，不直接回給瀏覽器。
 export class PlacesApiError extends Error {
   constructor(message: string, public status: number) {
     super(message);
@@ -66,6 +74,8 @@ async function callSearchText(body: Record<string, unknown>, fieldMask: string, 
   return data;
 }
 
+const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+
 // 以關鍵字搜尋指定座標附近的地點。locationBias 是「偏好」而非硬性限制，
 // 與舊版 textsearch 的 location + radius 行為一致。
 export async function searchPlaces(query: string, opts: SearchTextOptions): Promise<PlaceSummary[]> {
@@ -89,41 +99,105 @@ export async function searchPlaces(query: string, opts: SearchTextOptions): Prom
     apiKey,
   );
 
-  return (data.places || []).map((p: any) => ({
-    id: p.id,
-    name: p.displayName?.text || '',
-    address: p.formattedAddress || '',
-    lat: p.location?.latitude,
-    lng: p.location?.longitude,
-    rating: typeof p.rating === 'number' ? p.rating : null,
-    userRatingCount: typeof p.userRatingCount === 'number' ? p.userRatingCount : null,
-    photoName: p.photos?.[0]?.name || null,
-  }));
+  return (data.places || [])
+    // 沒有座標的地點無法放上地圖，直接略過
+    .filter((p: any) => p?.id && isNum(p.location?.latitude) && isNum(p.location?.longitude))
+    .map((p: any) => ({
+      id: p.id,
+      name: p.displayName?.text || '',
+      address: p.formattedAddress || '',
+      lat: p.location.latitude,
+      lng: p.location.longitude,
+      rating: isNum(p.rating) ? p.rating : null,
+      userRatingCount: isNum(p.userRatingCount) ? p.userRatingCount : null,
+      photoName: p.photos?.[0]?.name || null,
+    }));
 }
 
-// 把地名（例如「台中市西區」）轉成座標。用 Text Search 取第一筆，
-// 不必另外啟用 Geocoding API。查不到時回傳 null。
-export async function geocodeArea(area: string): Promise<{ lat: number; lng: number } | null> {
+// 行政區類型：查地名時優先採用這些結果，避免第一筆剛好是名稱相近的店家或商場
+const AREA_TYPES = new Set([
+  'political',
+  'locality',
+  'sublocality',
+  'sublocality_level_1',
+  'administrative_area_level_1',
+  'administrative_area_level_2',
+  'administrative_area_level_3',
+  'neighborhood',
+  'postal_town',
+]);
+
+export interface ResolvedArea {
+  lat: number;
+  lng: number;
+  label: string;
+}
+
+// 把地名（例如「台中市西區」）轉成座標，用 Text Search 取前五筆，優先挑行政區類型的結果。
+// 不必另外啟用 Geocoding API。查不到或失敗時回傳 null，並在 log 記下原因。
+// 計費：location、formattedAddress、types 同屬 Text Search Pro SKU。
+export async function geocodeArea(area: string): Promise<ResolvedArea | null> {
   const apiKey = getServerMapsKey();
   if (!apiKey || !area.trim()) return null;
   try {
     const data = await callSearchText(
-      { textQuery: area, languageCode: 'zh-TW', regionCode: 'TW', pageSize: 1 },
-      'places.location',
+      { textQuery: area, languageCode: 'zh-TW', regionCode: 'TW', pageSize: 5 },
+      'places.location,places.formattedAddress,places.displayName,places.types',
       apiKey,
     );
-    const loc = data.places?.[0]?.location;
-    if (typeof loc?.latitude !== 'number' || typeof loc?.longitude !== 'number') return null;
-    return { lat: loc.latitude, lng: loc.longitude };
-  } catch {
+    const candidates = (data.places || []).filter(
+      (p: any) => isNum(p.location?.latitude) && isNum(p.location?.longitude),
+    );
+    const pick =
+      candidates.find((p: any) => (p.types || []).some((t: string) => AREA_TYPES.has(t))) ||
+      candidates[0];
+    if (!pick) {
+      console.warn(`[places] 查無地名「${area}」`);
+      return null;
+    }
+    return {
+      lat: pick.location.latitude,
+      lng: pick.location.longitude,
+      label: pick.formattedAddress || pick.displayName?.text || area,
+    };
+  } catch (err: any) {
+    console.error(`[places] 地名「${area}」查詢失敗：`, err?.message);
     return null;
   }
 }
 
+// ---- 店家照片 ----
 // 照片資源名稱的格式：places/{placeId}/photos/{photoId}
 export const PHOTO_NAME_PATTERN = /^places\/[A-Za-z0-9_-]+\/photos\/[A-Za-z0-9_-]+$/;
 
-// 前端使用的照片網址：經由本站 /api/photo 轉送，金鑰不會出現在瀏覽器。
+// 照片網址有效時間。Google 規定照片名稱不可長期快取，一律從當次搜尋結果取得，
+// 所以網址只在搜尋後一小時內有效。
+export const PHOTO_URL_TTL_SECONDS = 60 * 60;
+
+// 簽章用的密鑰：優先使用 PHOTO_URL_SECRET；未設定時由伺服器端金鑰衍生，不需額外設定。
+function photoSecret(): string {
+  const base = process.env.PHOTO_URL_SECRET || getServerMapsKey() || '';
+  return createHmac('sha256', 'pethub-photo-url').update(base).digest('hex');
+}
+
+function signPhoto(name: string, exp: number): string {
+  return createHmac('sha256', photoSecret()).update(`${name}.${exp}`).digest('base64url');
+}
+
+// 前端使用的照片網址：經由本站 /api/photo，附有到期時間與簽章。
+// 只有本站搜尋時發出的網址能用，外部無法拿任意照片名稱來消耗我們的 Google 額度。
 export function photoProxyUrl(photoName: string | null): string | null {
-  return photoName ? `/api/photo?name=${encodeURIComponent(photoName)}` : null;
+  if (!photoName) return null;
+  const exp = Math.floor(Date.now() / 1000) + PHOTO_URL_TTL_SECONDS;
+  const sig = signPhoto(photoName, exp);
+  return `/api/photo?name=${encodeURIComponent(photoName)}&exp=${exp}&sig=${sig}`;
+}
+
+export function verifyPhotoUrl(name: string, exp: string | null, sig: string | null): boolean {
+  if (!PHOTO_NAME_PATTERN.test(name) || !exp || !sig || !/^\d+$/.test(exp)) return false;
+  const expNum = Number(exp);
+  if (expNum < Math.floor(Date.now() / 1000)) return false;
+  const expected = Buffer.from(signPhoto(name, expNum));
+  const given = Buffer.from(sig);
+  return expected.length === given.length && timingSafeEqual(expected, given);
 }

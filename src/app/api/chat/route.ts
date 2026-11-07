@@ -112,11 +112,23 @@ ${simplifiedStores.length > 0 ? JSON.stringify(simplifiedStores, null, 2) : '無
 
     if (!isEvaluationPhase) {
       // 指定地區時由 Google 查出真實座標，不採用模型憑記憶給的經緯度。
-      // 查不到就回傳 null，前端會改在使用者目前位置附近搜尋。
       const targetArea = typeof parsedResult.targetArea === 'string' ? parsedResult.targetArea.trim() : '';
-      const targetLocation = parsedResult.action === 'search' && targetArea
-        ? await geocodeArea(targetArea)
-        : null;
+      let targetLocation: { lat: number; lng: number } | null = null;
+
+      if (parsedResult.action === 'search' && targetArea) {
+        const resolved = await geocodeArea(targetArea);
+        if (!resolved) {
+          // 家長明確指定了地區卻查不到位置：不要默默改搜目前位置（會出現錯誤城市的店家），
+          // 改成請家長把地區說得更明確。
+          return NextResponse.json({
+            action: 'chat',
+            reply: `抱歉，我在地圖上找不到「${targetArea}」這個地方。可以告訴我更完整的地名嗎？例如「台中市西區」或「高雄市左營區」。`,
+            keyword: '',
+            targetLocation: null
+          });
+        }
+        targetLocation = { lat: resolved.lat, lng: resolved.lng };
+      }
 
       return NextResponse.json({
         action: parsedResult.action || 'chat',

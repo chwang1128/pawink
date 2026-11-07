@@ -32,8 +32,10 @@ export async function GET(req: Request) {
 
     return NextResponse.json({ results });
   } catch (error: any) {
-    const status = error instanceof PlacesApiError ? error.status : 500;
-    console.error('[api/places]', error?.message);
-    return NextResponse.json({ error: error?.message || '搜尋失敗', results: [] }, { status: status >= 400 ? status : 500 });
+    // 詳細原因只寫進 log；回給瀏覽器的訊息不帶 Google 的錯誤內容。
+    // 上游（Google）失敗一律回 502，與「前端參數錯誤」的 400 區分開。
+    const upstreamStatus = error instanceof PlacesApiError ? error.status : undefined;
+    console.error('[api/places] 搜尋失敗', upstreamStatus, error?.message);
+    return NextResponse.json({ error: '店家搜尋暫時無法使用', results: [] }, { status: 502 });
   }
 }
