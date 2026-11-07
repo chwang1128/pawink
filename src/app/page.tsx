@@ -125,7 +125,7 @@ const GoogleMapsAttribution = () => (
 );
 
 // 未登入時，寵物檔案暫存在這台裝置的瀏覽器；登入後會搬進帳號
-const GUEST_PET_KEY = 'pethub.guestPet.v1';
+const GUEST_PET_KEY = 'pawink.guestPet.v1';
 const readGuestPet = (): PetProfile | null => {
   try {
     const raw = window.localStorage.getItem(GUEST_PET_KEY);

@@ -278,7 +278,7 @@ export const PHOTO_URL_TTL_SECONDS = 60 * 60;
 // 簽章用的密鑰：優先使用 PHOTO_URL_SECRET；未設定時由伺服器端金鑰衍生，不需額外設定。
 function photoSecret(): string {
   const base = process.env.PHOTO_URL_SECRET || getServerMapsKey() || '';
-  return createHmac('sha256', 'pethub-photo-url').update(base).digest('hex');
+  return createHmac('sha256', 'pawink-photo-url').update(base).digest('hex');
 }
 
 function signPhoto(name: string, exp: number): string {
