@@ -1,10 +1,17 @@
 import './globals.css';
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import Providers from '@/components/Providers';
 
 export const metadata: Metadata = {
   title: 'Pawink 寵物生態系平台',
   description: '全台一站式寵物生活生態系平台 (B2C & B2B)',
+};
+
+// 手機鍵盤打開時縮小版面，讓底部的對話輸入框留在鍵盤上方
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  interactiveWidget: 'resizes-content',
 };
 
 export default function RootLayout({

@@ -150,7 +150,8 @@ const PROVIDER_LABEL: Record<string, string> = { line: '使用 LINE 登入', goo
 
 export default function FullMapAIPortal() {
   const [coins, setCoins] = useState(2000);
-  const [isAiBoxMinimized, setIsAiBoxMinimized] = useState(false);
+  // 預設收起，避免手機先閃出對話框；桌面版掛載後再展開
+  const [isAiBoxMinimized, setIsAiBoxMinimized] = useState(true);
   const [hasOpenedAi, setHasOpenedAi] = useState(false);
   const [locationStatus, setLocationStatus] = useState<'idle' | 'loading' | 'success' | 'denied' | 'error'>('idle');
 
@@ -275,8 +276,26 @@ export default function FullMapAIPortal() {
   const [hasMounted, setHasMounted] = useState(false);
   useEffect(() => {
     setHasMounted(true);
-    // 手機上 AI 對話框會蓋住下半個畫面；先收起來，讓附近店家版位露出
-    if (window.innerWidth < 768) setIsAiBoxMinimized(true);
+    // 手機上 AI 對話框會蓋住下半個畫面，維持收起讓附近店家版位露出；桌面版直接展開
+    if (window.innerWidth >= 768) setIsAiBoxMinimized(false);
+
+    // 手機鍵盤：iOS 開鍵盤時版面高度不變、只有可視區變小，要自己算出鍵盤高度，
+    // 讓對話框貼在鍵盤上方（Android Chrome 由 viewport 的 interactive-widget 處理）
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const root = document.documentElement;
+    const syncViewport = () => {
+      const keyboard = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+      root.style.setProperty('--kb', `${Math.round(keyboard)}px`);
+      root.style.setProperty('--vvh', `${Math.round(vv.height)}px`);
+    };
+    syncViewport();
+    vv.addEventListener('resize', syncViewport);
+    vv.addEventListener('scroll', syncViewport);
+    return () => {
+      vv.removeEventListener('resize', syncViewport);
+      vv.removeEventListener('scroll', syncViewport);
+    };
   }, []);
 
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -935,8 +954,8 @@ export default function FullMapAIPortal() {
 
       {/* 💻 電腦與手機共用對話視窗 */}
       {!isAiBoxMinimized && (
-        <div className="flex absolute bottom-0 md:bottom-6 md:right-6 w-full md:w-[400px] z-[70] flex-col pointer-events-none animate-in slide-in-from-bottom-10">
-          <div className="bg-[#FFFDF9]/95 backdrop-blur-3xl rounded-t-[32px] md:rounded-[32px] shadow-[0_-20px_48px_rgba(56,49,45,0.12)] p-5 md:p-6 flex flex-col h-[55vh] h-[55dvh] max-h-[calc(100dvh-96px)] md:h-[560px] md:max-h-[calc(100dvh-184px)] ring-1 ring-[#E8DFD8] pointer-events-auto relative overflow-hidden">
+        <div className="flex absolute bottom-[var(--kb,0px)] md:bottom-6 md:right-6 w-full md:w-[340px] lg:w-[400px] z-[70] flex-col pointer-events-none animate-in slide-in-from-bottom-10">
+          <div className="bg-[#FFFDF9]/95 backdrop-blur-3xl rounded-t-[32px] md:rounded-[32px] shadow-[0_-20px_48px_rgba(56,49,45,0.12)] p-5 md:p-6 flex flex-col h-[55vh] h-[55dvh] max-h-[calc(var(--vvh,100dvh)-16px)] md:h-[560px] md:max-h-[calc(100dvh-184px)] ring-1 ring-[#E8DFD8] pointer-events-auto relative overflow-hidden">
             <div className="absolute top-0 left-0 right-0 h-40 bg-gradient-to-b from-[#B88746]/10 to-transparent pointer-events-none"></div>
             
             <div className="w-full flex justify-center pb-3 md:hidden" onClick={() => { setIsAiBoxMinimized(true); setHasOpenedAi(true); }}>
@@ -1000,7 +1019,7 @@ export default function FullMapAIPortal() {
                   onChange={(e) => setInputQuery(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
                   placeholder={isListening ? "請說話..." : `請輸入想為 ${petProfile.name} 找的服務...`} 
-                  className="flex-1 bg-transparent text-sm px-2 py-3 outline-none text-[#38312D] placeholder:text-[#A67C52]/60"
+                  className="flex-1 min-w-0 bg-transparent text-base md:text-sm px-2 py-3 outline-none text-[#38312D] placeholder:text-[#A67C52]/60"
                   disabled={isAiTyping || isListening}
                 />
                 
@@ -1050,7 +1069,7 @@ export default function FullMapAIPortal() {
 
       {/* 底部店家精選卡片 */}
       {displayedStores.length > 0 && !selectedDetailStore && (
-        <div className="absolute bottom-7 md:bottom-9 left-0 right-0 z-20 px-4 md:px-6 md:pr-[440px] flex space-x-4 overflow-x-auto pb-2 snap-x hide-scrollbar pointer-events-auto">
+        <div className="absolute bottom-7 md:bottom-9 left-0 right-0 z-20 px-4 md:px-6 md:pr-[380px] lg:pr-[440px] flex space-x-4 overflow-x-auto pb-2 snap-x hide-scrollbar pointer-events-auto">
           {displayedStores.map((store, index) => (
             <div 
               key={store.id} 
@@ -1110,49 +1129,57 @@ export default function FullMapAIPortal() {
         >
           <h2 className="px-4 md:px-1 mb-2 text-xs font-black text-[#4A423D] tracking-wide flex items-center">
             <span className="bg-[#FFFDF9]/90 backdrop-blur-xl rounded-full px-3 py-1 ring-1 ring-[#E8DFD8] shadow-sm flex items-center">
-              <MapPin className="w-3.5 h-3.5 mr-1 text-[#B88746]" />
+              <MapPin className="w-3.5 h-3.5 mr-1 text-[#B88746]" aria-hidden="true" />
               離你最近的寵物店家
             </span>
+            <span className="ml-2 bg-[#FFFDF9]/90 rounded-full px-2 py-0.5 ring-1 ring-[#E8DFD8]"><GoogleMapsAttribution /></span>
           </h2>
-          <ul className="flex md:flex-col gap-3 overflow-x-auto md:overflow-visible snap-x hide-scrollbar px-4 md:px-0 pb-1">
+          <ul className="flex md:flex-col gap-3 overflow-x-auto md:overflow-visible snap-x snap-mandatory touch-pan-x md:touch-auto hide-scrollbar px-4 md:px-0 pb-1">
             {featuredStores.map((store, index) => (
               <li
                 key={store.id}
                 data-slot={index + 1}
-                className="card-enter w-[78vw] max-w-[320px] md:w-full md:max-w-none h-[104px] md:h-[96px] shrink-0 snap-center"
+                className="card-enter relative w-[78vw] max-w-[320px] md:w-full md:max-w-none h-[104px] md:h-[96px] shrink-0 snap-center bg-[#FFFDF9]/92 backdrop-blur-2xl rounded-[22px] shadow-[0_12px_28px_rgba(184,135,70,0.12)] ring-1 ring-[#E8DFD8] overflow-hidden flex transition-transform hover:-translate-y-0.5 focus-within:ring-2 focus-within:ring-[#B88746]"
                 style={{ animationDelay: `${index * 0.08}s` }}
               >
-                <button
-                  type="button"
-                  onClick={() => openDetailModal(store)}
-                  aria-label={`${store.name}，距離 ${store.distanceText}，查看店家資訊`}
-                  className="w-full h-full text-left bg-[#FFFDF9]/92 backdrop-blur-2xl rounded-[22px] shadow-[0_12px_28px_rgba(184,135,70,0.12)] ring-1 ring-[#E8DFD8] overflow-hidden flex cursor-pointer transition-transform hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B88746]"
-                >
-                <div className="relative w-[96px] md:w-[96px] h-full shrink-0">
-                  <img src={store.photoUrl} alt={store.name} className="w-full h-full object-cover" />
+                <div className="relative w-[96px] h-full shrink-0">
+                  <img src={store.photoUrl} alt="" className="w-full h-full object-cover" />
                   {store.photoAttributions.length > 0 && (
-                    <span className="absolute top-1 left-1 right-1 text-[8px] leading-tight text-white/85 truncate drop-shadow">
-                      相片：{store.photoAttributions[0].displayName}
+                    <span className="absolute top-1 left-1 right-1 z-10 text-[8px] leading-tight text-white/90 truncate drop-shadow">
+                      相片：
+                      {store.photoAttributions[0].uri ? (
+                        <a href={store.photoAttributions[0].uri} target="_blank" rel="noopener noreferrer" className="underline">
+                          {store.photoAttributions[0].displayName}
+                        </a>
+                      ) : store.photoAttributions[0].displayName}
                     </span>
                   )}
                 </div>
                 <div className="p-3 flex flex-col justify-center min-w-0 flex-1">
-                  <h3 className="font-black text-[#38312D] text-sm leading-tight truncate">{store.name}</h3>
+                  <h3 className="font-black text-[#38312D] text-sm leading-tight truncate">
+                    {/* 整張卡片可點：按鈕的 ::after 蓋滿卡片，相片作者連結疊在上層仍可點 */}
+                    <button
+                      type="button"
+                      onClick={() => openDetailModal(store)}
+                      className="text-left truncate max-w-full focus:outline-none after:absolute after:inset-0 after:content-['']"
+                    >
+                      {store.name}
+                    </button>
+                  </h3>
                   <div className="flex items-center mt-1.5 space-x-2 text-[11px] font-bold">
                     <span className="text-[#4D8B6F] flex items-center">
-                      <Navigation className="w-3 h-3 mr-0.5" />
-                      {store.distanceText}
+                      <Navigation className="w-3 h-3 mr-0.5" aria-hidden="true" />
+                      <span className="sr-only">距離</span>{store.distanceText}
                     </span>
                     {store.rating !== null && (
-                      <span className="text-[#38312D] flex items-center">
-                        <Star className="w-3 h-3 text-amber-500 fill-current mr-0.5" />
-                        {store.rating}
+                      <span className="text-[#38312D] flex items-center" aria-label={`Google 評分 ${store.rating} 顆星`}>
+                        <Star className="w-3 h-3 text-amber-500 fill-current mr-0.5" aria-hidden="true" />
+                        <span aria-hidden="true">{store.rating}</span>
                       </span>
                     )}
                   </div>
                   <p className="text-[11px] text-[#A67C52] truncate mt-1">{store.address}</p>
                 </div>
-                </button>
               </li>
             ))}
           </ul>
