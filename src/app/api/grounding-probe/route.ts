@@ -5,10 +5,13 @@ export async function POST(req: Request) {
   if (process.env.VERCEL_ENV !== 'preview') return NextResponse.json({ error: 'not found' }, { status: 404 });
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return NextResponse.json({ error: 'no key' }, { status: 500 });
-  const { prompt, lat, lng, model = 'gemini-3.8-flash', system, widget } = await req.json();
+  const { prompt, lat, lng, model = 'gemini-3.8-flash', system, widget, tool = 'maps' } = await req.json();
+  const tools: any[] = [];
+  if (tool === 'maps' || tool === 'both') tools.push({ googleMaps: widget ? { enableWidget: true } : {} });
+  if (tool === 'search' || tool === 'both') tools.push({ googleSearch: {} });
   const body: any = {
     contents: [{ role: 'user', parts: [{ text: String(prompt).slice(0, 500) }] }],
-    tools: [{ googleMaps: widget ? { enableWidget: true } : {} }],
+    tools,
     toolConfig: { retrievalConfig: { latLng: { latitude: Number(lat), longitude: Number(lng) }, languageCode: 'zh-TW' } },
   };
   if (system) body.systemInstruction = { parts: [{ text: String(system).slice(0, 3000) }] };
@@ -27,7 +30,8 @@ export async function POST(req: Request) {
     ms,
     error: data?.error?.message,
     text: (cand?.content?.parts || []).map((p: any) => p.text || '').join(''),
-    chunks: (gm.groundingChunks || []).map((c: any) => ({ title: c?.maps?.title, placeId: c?.maps?.placeId, uri: c?.maps?.uri, snippets: c?.maps?.placeAnswerSources?.reviewSnippets?.length || 0 })),
+    chunks: (gm.groundingChunks || []).map((c: any) => (c?.maps ? { kind: 'maps', title: c.maps.title, placeId: c.maps.placeId, uri: c.maps.uri } : { kind: 'web', title: c?.web?.title, uri: c?.web?.uri, domain: c?.web?.domain })),
+    searchEntryPoint: !!gm.searchEntryPoint?.renderedContent,
     supports: (gm.groundingSupports || []).length,
     queries: gm.webSearchQueries || gm.retrievalQueries || null,
     widgetToken: !!gm.googleMapsWidgetContextToken,
