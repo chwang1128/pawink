@@ -11,7 +11,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ reply: "❌ Vercel 尚未設定 GEMINI_API_KEY 環境變數。" });
     }
 
-    const selectedModel = 'gemini-3.7-flash';
+    // 模型可用環境變數 GEMINI_MODEL 切換；未設定時用 gemini-3.8-flash
+    // （gemini-3.7-flash 已於 2026-10-08 棄用）
+    const selectedModel = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
     const body = await req.json();
     const { prompt, petProfile, history, isEvaluationPhase } = body;
 
