@@ -284,17 +284,45 @@ export default function FullMapAIPortal() {
     const vv = window.visualViewport;
     if (!vv) return;
     const root = document.documentElement;
+    let frame = 0;
+    let lastKeyboard = 0;
     const syncViewport = () => {
-      const keyboard = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
-      root.style.setProperty('--kb', `${Math.round(keyboard)}px`);
-      root.style.setProperty('--vvh', `${Math.round(vv.height)}px`);
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        // iOS 開鍵盤時整頁會往上捲 offsetTop，所以要一併扣掉，對話框才會剛好貼在鍵盤上方。
+        // Android 有 interactive-widget=resizes-content，innerHeight 會跟著縮，這裡自然算出 0，不會重複抬高。
+        let keyboard = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+        if (keyboard < 4) keyboard = 0; // 網址列伸縮造成的小抖動不算鍵盤
+        root.style.setProperty('--kb', `${Math.round(keyboard)}px`);
+        root.style.setProperty('--vvh', `${Math.round(vv.height)}px`);
+        // 鍵盤剛打開：對話區變矮，捲到最新訊息，讓使用者打字時看得到上下文
+        if (keyboard > 0 && lastKeyboard === 0) {
+          const list = messagesEndRef.current?.parentElement;
+          if (list) list.scrollTop = list.scrollHeight;
+        }
+        lastKeyboard = keyboard;
+      });
+    };
+    // 鍵盤收起後 iOS 有時停在捲動過的位置，強制回到頂端並重新計算
+    const onFocusOut = () => {
+      setTimeout(() => {
+        if (!(document.activeElement instanceof HTMLInputElement || document.activeElement instanceof HTMLTextAreaElement)) {
+          window.scrollTo(0, 0);
+        }
+        syncViewport();
+      }, 120);
     };
     syncViewport();
     vv.addEventListener('resize', syncViewport);
     vv.addEventListener('scroll', syncViewport);
+    window.addEventListener('orientationchange', syncViewport);
+    document.addEventListener('focusout', onFocusOut);
     return () => {
+      cancelAnimationFrame(frame);
       vv.removeEventListener('resize', syncViewport);
       vv.removeEventListener('scroll', syncViewport);
+      window.removeEventListener('orientationchange', syncViewport);
+      document.removeEventListener('focusout', onFocusOut);
     };
   }, []);
 
