@@ -372,6 +372,16 @@ export default function FullMapAIPortal() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isLoading, isAiTyping]);
 
+  // 手機版對話框收起時捲動無效：重新打開時直接跳到最新訊息（例如點「看完整對話」）
+  useEffect(() => {
+    if (isAiBoxMinimized) return;
+    const t = setTimeout(() => {
+      const list = messagesEndRef.current?.parentElement;
+      if (list) list.scrollTop = list.scrollHeight;
+    }, 80);
+    return () => clearTimeout(t);
+  }, [isAiBoxMinimized]);
+
   useEffect(() => {
     const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '';
 
