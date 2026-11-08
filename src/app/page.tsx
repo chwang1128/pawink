@@ -324,15 +324,7 @@ export default function FullMapAIPortal() {
     }
   }, []);
 
-  useEffect(() => {
-    let meta = document.querySelector('meta[name="viewport"]');
-    if (!meta) {
-      meta = document.createElement('meta');
-      meta.setAttribute('name', 'viewport');
-      document.head.appendChild(meta);
-    }
-    meta.setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no');
-  }, []);
+  // viewport 設定統一在 layout.tsx（含鍵盤處理的 interactive-widget），這裡不再覆寫
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });

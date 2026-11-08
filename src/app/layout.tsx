@@ -11,6 +11,9 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
+  // 沿用原本的設定：地圖用雙指縮放，關閉整頁縮放避免互相干擾
+  maximumScale: 1,
+  userScalable: false,
   interactiveWidget: 'resizes-content',
 };
 
