@@ -1119,10 +1119,15 @@ export default function FullMapAIPortal() {
               <li
                 key={store.id}
                 data-slot={index + 1}
-                onClick={() => openDetailModal(store)}
-                className="card-enter w-[78vw] max-w-[320px] md:w-full md:max-w-none h-[104px] md:h-[96px] shrink-0 snap-center bg-[#FFFDF9]/92 backdrop-blur-2xl rounded-[22px] shadow-[0_12px_28px_rgba(184,135,70,0.12)] ring-1 ring-[#E8DFD8] overflow-hidden flex cursor-pointer transition-transform hover:-translate-y-0.5"
+                className="card-enter w-[78vw] max-w-[320px] md:w-full md:max-w-none h-[104px] md:h-[96px] shrink-0 snap-center"
                 style={{ animationDelay: `${index * 0.08}s` }}
               >
+                <button
+                  type="button"
+                  onClick={() => openDetailModal(store)}
+                  aria-label={`${store.name}，距離 ${store.distanceText}，查看店家資訊`}
+                  className="w-full h-full text-left bg-[#FFFDF9]/92 backdrop-blur-2xl rounded-[22px] shadow-[0_12px_28px_rgba(184,135,70,0.12)] ring-1 ring-[#E8DFD8] overflow-hidden flex cursor-pointer transition-transform hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B88746]"
+                >
                 <div className="relative w-[96px] md:w-[96px] h-full shrink-0">
                   <img src={store.photoUrl} alt={store.name} className="w-full h-full object-cover" />
                   {store.photoAttributions.length > 0 && (
@@ -1147,6 +1152,7 @@ export default function FullMapAIPortal() {
                   </div>
                   <p className="text-[11px] text-[#A67C52] truncate mt-1">{store.address}</p>
                 </div>
+                </button>
               </li>
             ))}
           </ul>
