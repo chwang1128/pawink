@@ -25,6 +25,7 @@ export interface GroundingRequest {
   need: string; // 服務類別名稱，例如「寵物寄宿」
   features: string[]; // 條件，例如「不關籠」
   area: string | null; // 地區文字；null 表示家長目前位置附近
+  radiusKm: number; // 只列中心點附近多遠內的店
   lat: number;
   lng: number;
 }
@@ -52,7 +53,8 @@ export function buildSearchSystem(features: string[]) {
 
 export function buildUserPrompt(r: GroundingRequest) {
   const cond = r.features.length ? `，條件：${r.features.join('、')}` : '';
-  return `需求：${r.need}${cond}。地點：${r.area || '我目前的位置附近'}。原本的問題：${r.question.slice(0, 200)}`;
+  // Google 搜尋看不到座標，只看文字：地點一定要寫出地名，並限制距離
+  return `需求：${r.need}${cond}。地點：${r.area || '我目前的位置附近'}，只列距離這裡約 ${r.radiusKm} 公里內的店，太遠的不要列。原本的問題：${r.question.slice(0, 200)}`;
 }
 
 const stripPlacesPrefix = (id: unknown) => (typeof id === 'string' && id ? id.replace(/^places\//, '') : null);
@@ -102,3 +104,10 @@ export function parseSearch(data: any): GroundingResult['search'] {
 
 // 「只回一句：沒有明確提到」的情況，前端收成一行小字
 export const isNothingFound = (text: string) => /沒有明確提到/.test(text) && text.length < 80;
+
+// 從地址取出「縣市＋區」，例如「106台灣台北市大安區復興南路…」→「台北市大安區」
+export function districtOf(address: string | null | undefined): string | null {
+  if (!address) return null;
+  const m = address.replace(/臺/g, '台').match(/([\u4e00-\u9fa5]{2}[市縣])([\u4e00-\u9fa5]{1,3}?[區鄉鎮市])/);
+  return m ? m[1] + m[2] : null;
+}

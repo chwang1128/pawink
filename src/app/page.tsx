@@ -9,7 +9,7 @@ import {
   , LogIn, LogOut
 } from 'lucide-react';
 import { SERVICE_CATEGORIES, type ServiceCategoryKey } from '@/lib/service-categories';
-import type { GroundingResult } from '@/lib/grounding';
+import { districtOf, type GroundingResult } from '@/lib/grounding';
 import GroundedAnswer, { GroundingLoading } from '@/components/GroundedAnswer';
 
 interface PetProfile {
@@ -778,7 +778,10 @@ export default function FullMapAIPortal() {
         const gLat = targetLat ?? userLocation?.lat ?? null;
         const gLng = targetLng ?? userLocation?.lng ?? null;
         if (chatData.grounding && gLat !== null && gLng !== null) {
-          void runGrounding(text, chatData.grounding, gLat, gLng);
+          // 沒講地區時，用最近一家店的地址取出「縣市＋區」，讓網路搜尋知道在哪裡
+          const area = chatData.grounding.area || districtOf(latestStores[0]?.address);
+          const radiusKm = Math.max(5, Math.min(SCOPE_RADIUS_KM[(chatData.scope || 'near') as SearchScope] * 2, 15));
+          void runGrounding(text, { ...chatData.grounding, area, radiusKm }, gLat, gLng);
         }
       }
     } catch (err) {
@@ -791,7 +794,7 @@ export default function FullMapAIPortal() {
   };
 
   const groundingSeq = useRef(0);
-  const runGrounding = async (question: string, g: { need: string; features: string[]; area: string | null }, lat: number, lng: number) => {
+  const runGrounding = async (question: string, g: { need: string; features: string[]; area: string | null; radiusKm: number }, lat: number, lng: number) => {
     const gid = ++groundingSeq.current;
     setMessages(prev => [...prev, { sender: 'ai', text: '', grounding: 'loading', gid }]);
     let result: GroundingResult | null = null;
@@ -799,7 +802,7 @@ export default function FullMapAIPortal() {
       const res = await fetch('/api/grounding', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question, need: g.need, features: g.features, area: g.area, lat, lng }),
+        body: JSON.stringify({ question, need: g.need, features: g.features, area: g.area, radiusKm: g.radiusKm, lat, lng }),
       });
       if (res.ok) result = await res.json();
     } catch {}

@@ -56,6 +56,7 @@ export async function POST(req: Request) {
     need: body.need.trim().slice(0, 30),
     features: (Array.isArray(body.features) ? body.features : []).filter((f: unknown) => typeof f === 'string').slice(0, 2).map((f: string) => f.slice(0, 12)),
     area: typeof body.area === 'string' && body.area.trim() ? body.area.trim().slice(0, 40) : null,
+    radiusKm: Math.min(Math.max(Number(body.radiusKm) || 5, 2), 15),
     lat, lng,
   };
   const user = buildUserPrompt(r);
