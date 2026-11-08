@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server';
+import { townOfPoint } from '@/lib/tw-towns';
+import { clientKey, takeDailyQuota } from '@/lib/usage-limit';
 import {
   buildMapsSystem, buildSearchSystem, buildUserPrompt, parseMaps, parseSearch,
   type GroundingRequest, type GroundingResult,
@@ -7,7 +9,10 @@ import {
 // AI 查證（Grounding）。找店時由前端在店家標上地圖後呼叫，地圖與網路分享兩個查詢同時進行。
 // 用輕量模型求快；任何一邊沒有來源、逾時或失敗就略過那一邊，不影響一般搜尋結果。
 const MODEL = process.env.GROUNDING_MODEL || 'gemini-3.5-flash-lite';
-const TIMEOUT_MS = 9000;
+const TIMEOUT_MS = 8000;
+// 每日上限：Google 搜尋與 Google 地圖 Grounding 各有每月 5,000 次免費額度，每天 150 次約落在免費額度內
+const DAILY_TOTAL = Number(process.env.GROUNDING_DAILY_CAP) || 150;
+const DAILY_PER_CLIENT = Number(process.env.GROUNDING_DAILY_PER_CLIENT) || 30;
 
 async function callGemini(apiKey: string, system: string, user: string, tool: object, lat: number, lng: number) {
   const ctrl = new AbortController();
@@ -55,10 +60,17 @@ export async function POST(req: Request) {
     question: String(body.question || '').slice(0, 300),
     need: body.need.trim().slice(0, 30),
     features: (Array.isArray(body.features) ? body.features : []).filter((f: unknown) => typeof f === 'string').slice(0, 2).map((f: string) => f.slice(0, 12)),
-    area: typeof body.area === 'string' && body.area.trim() ? body.area.trim().slice(0, 40) : null,
+    // 家長沒講地點＝目前所在地：用內政部鄉鎮界線查出「縣市＋區」（Google 搜尋看不到座標）
+    area: typeof body.area === 'string' && body.area.trim()
+      ? body.area.trim().slice(0, 40)
+      : (townOfPoint(lat, lng) ? `${townOfPoint(lat, lng)}（我目前所在地）` : null),
     radiusKm: Math.min(Math.max(Number(body.radiusKm) || 5, 2), 15),
     lat, lng,
   };
+  if (!(await takeDailyQuota('grounding', clientKey(req), DAILY_PER_CLIENT, DAILY_TOTAL))) {
+    console.info('[api/grounding] 已達每日上限，略過');
+    return NextResponse.json(empty);
+  }
   const user = buildUserPrompt(r);
   const t0 = Date.now();
   const [mapsData, searchData] = await Promise.all([

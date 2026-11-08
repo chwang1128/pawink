@@ -9,7 +9,7 @@ import {
   , LogIn, LogOut
 } from 'lucide-react';
 import { SERVICE_CATEGORIES, type ServiceCategoryKey } from '@/lib/service-categories';
-import { districtNear, type GroundingResult } from '@/lib/grounding';
+import type { GroundingResult } from '@/lib/grounding';
 import GroundedAnswer, { GroundingLoading } from '@/components/GroundedAnswer';
 
 interface PetProfile {
@@ -788,9 +788,8 @@ export default function FullMapAIPortal() {
         const gLat = targetLat ?? userLocation?.lat ?? null;
         const gLng = targetLng ?? userLocation?.lng ?? null;
         if (chatData.grounding && gLat !== null && gLng !== null) {
-          // 沒講地點＝家長目前所在地：以目前位置為中心，並用最近幾家店地址的「縣市＋區」告訴網路搜尋在哪裡
-          const nearest = [...latestStores].sort((x, y) => (x.distanceKm ?? 99) - (y.distanceKm ?? 99)).map(st => st.address);
-          const area = chatData.grounding.area || (districtNear(nearest) ? `${districtNear(nearest)}（我目前所在地）` : null);
+          // 沒講地點時 area 為 null：伺服器以目前位置查出所在的「縣市＋區」
+          const area = chatData.grounding.area;
           const radiusKm = Math.max(5, Math.min(SCOPE_RADIUS_KM[(chatData.scope || 'near') as SearchScope] * 2, 15));
           void runGrounding(text, { ...chatData.grounding, area, radiusKm }, gLat, gLng);
         }
