@@ -100,6 +100,9 @@ const calculateAge = (birthday: string) => {
 // 推薦卡片只取搜尋點附近這個距離內的店家
 const CARD_RADIUS_KM = 3;
 
+// 左下角附近店家版位數量（日後的廣告版位）
+const FEATURED_SLOT_COUNT = 3;
+
 // 今天（台灣時間）的營業時間。Google 的 weekdayDescriptions 以星期一為第一筆；
 // 用台灣時區判斷星期幾，避免使用者裝置在其他時區時顯示成前一天或後一天。
 const TW_WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -258,6 +261,9 @@ export default function FullMapAIPortal() {
   const [inputQuery, setInputQuery] = useState('');
   const [stores, setStores] = useState<Store[]>([]);
   const [displayedStores, setDisplayedStores] = useState<Store[]>([]);
+  // 左下角「附近店家」三個版位：開站時依使用者位置顯示最近的三家。
+  // 之後要開放給店家刊登廣告時，從這裡換成付費店家（並加上「贊助」標示）。
+  const [featuredStores, setFeaturedStores] = useState<Store[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isAiTyping, setIsAiTyping] = useState(false); 
   
@@ -267,7 +273,11 @@ export default function FullMapAIPortal() {
   const [notice, setNotice] = useState<string | null>(null);
   // 年齡依「今天」計算，只在瀏覽器端算，避免伺服器預先產生的畫面日期不同造成 React hydration 錯誤
   const [hasMounted, setHasMounted] = useState(false);
-  useEffect(() => { setHasMounted(true); }, []);
+  useEffect(() => {
+    setHasMounted(true);
+    // 手機上 AI 對話框會蓋住下半個畫面；先收起來，讓附近店家版位露出
+    if (window.innerWidth < 768) setIsAiBoxMinimized(true);
+  }, []);
 
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const showNotice = (text: string) => {
@@ -436,7 +446,9 @@ export default function FullMapAIPortal() {
     markersRef.current = [];
 
     stores.forEach(store => {
-      const isSelected = selectedDetailStore?.id === store.id || displayedStores.some(ds => ds.id === store.id);
+      const isSelected = selectedDetailStore?.id === store.id
+        || displayedStores.some(ds => ds.id === store.id)
+        || (displayedStores.length === 0 && featuredStores.some(fs => fs.id === store.id));
       
       const pinColor = isSelected ? '#E07A5F' : '#B88746';
       const scale = isSelected ? 1.2 : 1.0;
@@ -487,7 +499,7 @@ export default function FullMapAIPortal() {
         mapRef.current.fitBounds(bounds, { bottom: 140, top: 100, left: 20, right: 20 });
       }
     }
-  }, [stores, displayedStores, selectedDetailStore, lastSearchMode]);
+  }, [stores, displayedStores, featuredStores, selectedDetailStore, lastSearchMode]);
 
   const speakText = (text: string) => {
     if ('speechSynthesis' in window) {
@@ -603,6 +615,10 @@ export default function FullMapAIPortal() {
       const byDistance = [...allFetchedStores].sort((a, b) => (a.distanceKm ?? 0) - (b.distanceKm ?? 0));
       const cards = [...nearby, ...byDistance.filter(st => !nearby.includes(st))].slice(0, 3);
       setDisplayedStores(showCards ? cards : []);
+      // 開站與回到定位點的「寵物」搜尋：用距離最近的三家填滿附近店家版位
+      if (!showCards && keyword === '寵物' && searchType === 'gps') {
+        setFeaturedStores(byDistance.slice(0, FEATURED_SLOT_COUNT));
+      }
       return allFetchedStores;
     } catch (error: any) {
       console.error(error);
@@ -920,7 +936,7 @@ export default function FullMapAIPortal() {
       {/* 💻 電腦與手機共用對話視窗 */}
       {!isAiBoxMinimized && (
         <div className="flex absolute bottom-0 md:bottom-6 md:right-6 w-full md:w-[400px] z-[70] flex-col pointer-events-none animate-in slide-in-from-bottom-10">
-          <div className="bg-[#FFFDF9]/95 backdrop-blur-3xl rounded-t-[32px] md:rounded-[32px] shadow-[0_-20px_48px_rgba(56,49,45,0.12)] p-5 md:p-6 flex flex-col h-[55vh] md:h-[560px] ring-1 ring-[#E8DFD8] pointer-events-auto relative overflow-hidden">
+          <div className="bg-[#FFFDF9]/95 backdrop-blur-3xl rounded-t-[32px] md:rounded-[32px] shadow-[0_-20px_48px_rgba(56,49,45,0.12)] p-5 md:p-6 flex flex-col h-[55vh] h-[55dvh] max-h-[calc(100dvh-96px)] md:h-[560px] md:max-h-[calc(100dvh-184px)] ring-1 ring-[#E8DFD8] pointer-events-auto relative overflow-hidden">
             <div className="absolute top-0 left-0 right-0 h-40 bg-gradient-to-b from-[#B88746]/10 to-transparent pointer-events-none"></div>
             
             <div className="w-full flex justify-center pb-3 md:hidden" onClick={() => { setIsAiBoxMinimized(true); setHasOpenedAi(true); }}>
@@ -934,7 +950,7 @@ export default function FullMapAIPortal() {
               <X className="w-5 h-5" />
             </button>
             
-            <div className="flex items-center space-x-3.5 mb-6 relative z-10">
+            <div className="flex items-center space-x-3.5 mb-4 md:mb-6 relative z-10 shrink-0">
               <div className="w-12 h-12 rounded-[18px] bg-[#B88746] text-white flex items-center justify-center shadow-lg shadow-[#B88746]/25">
                 <Sparkles className="w-6 h-6" />
               </div>
@@ -944,7 +960,7 @@ export default function FullMapAIPortal() {
               </div>
             </div>
             
-            <div className="flex-1 overflow-y-auto space-y-4 py-2 pr-3 hide-scrollbar relative z-10">
+            <div className="flex-1 min-h-0 overflow-y-auto space-y-4 py-2 pr-3 hide-scrollbar relative z-10">
               {messages.map((m, idx) => (
                 <div key={idx} className={`flex ${m.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
                   <div className={`p-4 rounded-[20px] max-w-[88%] text-[14px] leading-relaxed shadow-sm ${
@@ -967,7 +983,7 @@ export default function FullMapAIPortal() {
               <div ref={messagesEndRef} />
             </div>
             
-            <div className="relative z-10 mt-5 pt-2 border-t border-[#E8DFD8]">
+            <div className="relative z-10 mt-3 md:mt-5 pt-2 border-t border-[#E8DFD8] shrink-0">
               <div className="flex items-center bg-white ring-1 ring-[#E8DFD8] rounded-[24px] p-1.5 focus-within:ring-2 focus-within:ring-[#B88746]/30 transition-all shadow-sm">
                 
                 <button
@@ -1004,7 +1020,7 @@ export default function FullMapAIPortal() {
       {/* 喚醒懸浮鈕 */}
       {isAiBoxMinimized && (
         <div className={`absolute z-30 flex flex-col items-end pointer-events-auto transition-all duration-400 ease-out right-4 md:right-6 animate-bounce ${
-          displayedStores.length > 0 && !selectedDetailStore ? 'bottom-[130px] md:bottom-8' : 'bottom-6 md:bottom-8'
+          (displayedStores.length > 0 || featuredStores.length > 0) && !selectedDetailStore ? 'bottom-[150px] md:bottom-8' : 'bottom-6 md:bottom-8'
         }`}>
           
           {!hasOpenedAi && (
@@ -1083,6 +1099,58 @@ export default function FullMapAIPortal() {
             </div>
           ))}
         </div>
+      )}
+
+
+      {/* 左下角：附近店家版位（日後的廣告版位）。有搜尋結果卡片或店家詳情時讓位 */}
+      {featuredStores.length > 0 && displayedStores.length === 0 && !selectedDetailStore && (
+        <section
+          aria-label="附近店家"
+          className="absolute z-20 pointer-events-auto left-0 right-0 bottom-3 md:right-auto md:left-6 md:bottom-6 md:w-[280px] lg:w-[340px]"
+        >
+          <h2 className="px-4 md:px-1 mb-2 text-xs font-black text-[#4A423D] tracking-wide flex items-center">
+            <span className="bg-[#FFFDF9]/90 backdrop-blur-xl rounded-full px-3 py-1 ring-1 ring-[#E8DFD8] shadow-sm flex items-center">
+              <MapPin className="w-3.5 h-3.5 mr-1 text-[#B88746]" />
+              離你最近的寵物店家
+            </span>
+          </h2>
+          <ul className="flex md:flex-col gap-3 overflow-x-auto md:overflow-visible snap-x hide-scrollbar px-4 md:px-0 pb-1">
+            {featuredStores.map((store, index) => (
+              <li
+                key={store.id}
+                data-slot={index + 1}
+                onClick={() => openDetailModal(store)}
+                className="card-enter w-[78vw] max-w-[320px] md:w-full md:max-w-none h-[104px] md:h-[96px] shrink-0 snap-center bg-[#FFFDF9]/92 backdrop-blur-2xl rounded-[22px] shadow-[0_12px_28px_rgba(184,135,70,0.12)] ring-1 ring-[#E8DFD8] overflow-hidden flex cursor-pointer transition-transform hover:-translate-y-0.5"
+                style={{ animationDelay: `${index * 0.08}s` }}
+              >
+                <div className="relative w-[96px] md:w-[96px] h-full shrink-0">
+                  <img src={store.photoUrl} alt={store.name} className="w-full h-full object-cover" />
+                  {store.photoAttributions.length > 0 && (
+                    <span className="absolute top-1 left-1 right-1 text-[8px] leading-tight text-white/85 truncate drop-shadow">
+                      相片：{store.photoAttributions[0].displayName}
+                    </span>
+                  )}
+                </div>
+                <div className="p-3 flex flex-col justify-center min-w-0 flex-1">
+                  <h3 className="font-black text-[#38312D] text-sm leading-tight truncate">{store.name}</h3>
+                  <div className="flex items-center mt-1.5 space-x-2 text-[11px] font-bold">
+                    <span className="text-[#4D8B6F] flex items-center">
+                      <Navigation className="w-3 h-3 mr-0.5" />
+                      {store.distanceText}
+                    </span>
+                    {store.rating !== null && (
+                      <span className="text-[#38312D] flex items-center">
+                        <Star className="w-3 h-3 text-amber-500 fill-current mr-0.5" />
+                        {store.rating}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-[#A67C52] truncate mt-1">{store.address}</p>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
 
       {/* 店家詳情 Bottom Sheet */}
