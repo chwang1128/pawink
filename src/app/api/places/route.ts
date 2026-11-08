@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { searchPlaces, photoProxyUrl, PlacesApiError } from '@/lib/places';
+import { searchPlaces, photoProxyUrl, detailsToken, PlacesApiError } from '@/lib/places';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,7 +13,8 @@ export async function GET(req: Request) {
     return NextResponse.json({ results: [], error: '座標格式錯誤' }, { status: 400 });
   }
 
-  const cleanKeyword = rawKeyword.replace(/(狗狗|貓咪|\?|？|請問|我要找|想找)/g, '').trim() || '寵物';
+  // 只去掉口語贅字。「狗狗」「貓咪」保留，因為「貓咪友善咖啡」這類查詢需要它們。
+  const cleanKeyword = rawKeyword.replace(/(\?|？|請問|我要找|想找)/g, '').trim() || '寵物';
 
   try {
     // 半徑 1 公里，與地圖 15 倍放大的視野相符
@@ -28,6 +29,9 @@ export async function GET(req: Request) {
       rating: p.rating ?? undefined,
       user_ratings_total: p.userRatingCount ?? undefined,
       photoUrl: photoProxyUrl(p.photoName),
+      photoAttributions: p.photoAttributions,
+      // 點開店家時向 /api/place-details 出示的憑證
+      detailsToken: detailsToken(p.id),
     }));
 
     return NextResponse.json({ results });

@@ -20,42 +20,43 @@ interface PetProfile {
   vaccineLastDate: string; 
 }
 
-interface RequirementTag {
-  label: string;
-  isEssential: boolean; 
-  met: boolean;         
+interface PlaceReview {
+  text: string;
+  rating: number | null;
+  author: string;
+  authorUri: string | null;
+  authorPhotoUri: string | null;
+  relativeTime: string;
+  url: string | null;
+  flagUrl: string | null;
+  translated: boolean;
 }
 
-interface FaqHighlight {
-  question: string;
-  answer: string;
-  sourceType: 'Google 顧客評論' | '商家官方簡介';
-  sourceUrl: string;
+interface StoreDetails {
+  phone: string | null;
+  website: string | null;
+  googleMapsUri: string | null;
+  openNow: boolean | null;
+  weekdayHours: string[];
+  editorialSummary: string | null;
+  reviews: PlaceReview[];
 }
 
 interface Store {
   id: string;
   name: string;
-  category: string;
   lat: number;
   lng: number;
-  rating: number;
-  reviewsCount: number;
+  rating: number | null;
+  reviewsCount: number | null;
   address: string;
-  price: string;
-  aiSummary: string;
   photoUrl: string;
+  photoAttributions: { displayName: string; uri: string | null }[];
+  detailsToken: string;
   distanceKm?: number;
   distanceText?: string;
-  phone?: string;
-  openingHours?: string;
-  website?: string;
-  requirementsStatus: RequirementTag[];
-  allEssentialMet: boolean; 
-  aiDetails: {
-    generalSummary: string;
-    faqHighlights: FaqHighlight[];
-  };
+  // 點開店家時才向 Google 取得
+  details?: StoreDetails;
 }
 
 const QUICK_FILTERS = [
@@ -94,107 +95,32 @@ const calculateAge = (birthday: string) => {
   return `${ageYears} 歲${ageMonths > 0 ? ` ${ageMonths} 個月` : ''}`;
 };
 
-const parseStructuredRequirements = (query: string): { essential: string[]; optional: string[] } => {
-  const essential: string[] = [];
-  const optional: string[] = [];
+// 推薦卡片只取搜尋點附近這個距離內的店家
+const CARD_RADIUS_KM = 3;
 
-  if (query.includes('住宿') || query.includes('旅館') || query.includes('過夜') || query.includes('寄宿')) essential.push('寵物過夜住宿');
-  if (query.includes('不關籠') || query.includes('放風')) essential.push('不關籠放風');
-  if (query.includes('吃') || query.includes('餐') || query.includes('飯') || query.includes('喝')) essential.push('攜寵用餐');
-  if (query.includes('大狗') || query.includes('大型犬')) essential.push('接待大型犬');
-
-  if (query.includes('鮮食') || query.includes('手作餐')) optional.push('提供寵物鮮食');
-  if (query.includes('散步') || query.includes('草皮')) optional.push('專人帶散步');
-  if (query.includes('監控') || query.includes('攝影機')) optional.push('24H遠端監控');
-
-  if (essential.length === 0 && optional.length === 0) {
-    const cleanQuery = query.replace(/(狗狗|貓咪|\?|？|請問|哪裡可以|帶|去|幫|找)/g, '').trim();
-    if (cleanQuery) essential.push(cleanQuery);
-    else essential.push('寵物設施與服務');
-  }
-
-  return { essential, optional };
+// 今天（台灣時間）的營業時間。Google 的 weekdayDescriptions 以星期一為第一筆；
+// 用台灣時區判斷星期幾，避免使用者裝置在其他時區時顯示成前一天或後一天。
+const TW_WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const todayHours = (weekdayHours: string[]): string | null => {
+  if (weekdayHours.length !== 7) return null;
+  const day = new Intl.DateTimeFormat('en-US', { weekday: 'short', timeZone: 'Asia/Taipei' }).format(new Date());
+  const idx = TW_WEEKDAYS.indexOf(day);
+  return idx >= 0 ? weekdayHours[idx] : null;
 };
 
-const evaluateStoreRequirements = (
-  storeName: string, 
-  essentialReqs: string[], 
-  optionalReqs: string[], 
-  storeId: string
-): { tags: RequirementTag[]; allEssentialMet: boolean } => {
-  const hash = storeId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-  const lowerName = storeName.toLowerCase();
-  
-  const tags: RequirementTag[] = [];
-  let allEssentialMet = true;
+// 撥號連結：保留數字與 +，分機符號轉成撥號暫停（逗號）
+const telHref = (phone: string) =>
+  'tel:' + phone.replace(/(#|ext\.?|分機)/gi, ',').replace(/[^0-9+,]/g, '');
 
-  essentialReqs.forEach((req, idx) => {
-    let met = true;
-    if (req === '寵物過夜住宿' && (lowerName.includes('咖啡') || lowerName.includes('café') || lowerName.includes('甜點') || lowerName.includes('茶'))) {
-      met = false; 
-    } else {
-      met = (hash + idx) % 5 !== 0; 
-    }
-    if (!met) allEssentialMet = false;
-    tags.push({ label: req, isEssential: true, met });
-  });
-
-  optionalReqs.forEach((req, idx) => {
-    const met = (hash + idx) % 2 === 0;
-    tags.push({ label: req, isEssential: false, met });
-  });
-
-  return { tags, allEssentialMet };
-};
-
-const generateDynamicAiAnalysis = (
-  name: string, 
-  keyword: string, 
-  rating: number, 
-  reviewsCount: number, 
-  storeId: string,
-  userReqs: string[]
-) => {
-  const lowerName = (name + ' ' + keyword).toLowerCase();
-
-  let serviceProvided = '提供寵物友善休閒與照護空間';
-  let specialty = '座位與空間規劃寬敞，工作人員對毛孩態度親切體貼';
-
-  if (lowerName.includes('住宿') || lowerName.includes('旅館') || lowerName.includes('寄宿')) {
-    serviceProvided = '提供獨立寵物住宿套房、日間安親照護與專人陪伴服務';
-    specialty = '設有全區不關籠大坪數放風區，每日定時回傳照護影片';
-  } else if (lowerName.includes('醫院') || lowerName.includes('診所')) {
-    serviceProvided = '提供專業寵物醫療與健康諮詢服務';
-    specialty = '醫師問診詳細且具備耐心，設備齊全';
-  } else if (lowerName.includes('咖啡') || lowerName.includes('餐廳') || lowerName.includes('吃')) {
-    serviceProvided = '提供特色餐點飲品與寵物同行用餐環境';
-    specialty = '室內通風無異味，桌距寬敞，歡迎毛孩落地同桌陪伴用餐';
-  }
-
-  const generalSummary = `【提供產品與服務】${serviceProvided}。\n` +
-                         `【店家招牌特色】${specialty}。\n` +
-                         `【一般顧客評論】累積 ${reviewsCount} 則 Google 地圖顧客評價，獲得 ${rating} 星高分好評，家長讚賞服務專業且環境照顧周到。`;
-
-  const faqHighlights: FaqHighlight[] = userReqs.map((req) => {
-    let question = `關於「${req}」的要求說明`;
-    let answer = `依據顧客評論與官方簡介回饋：店家在 ${req} 項目提供規範透明的照護流程。`;
-    let sourceType: 'Google 顧客評論' | '商家官方簡介' = 'Google 顧客評論';
-    let sourceUrl = `https://www.google.com/maps/place/?q=place_id:${storeId}`;
-
-    if (req.includes('住宿')) {
-      question = '是否具備合格寵物住宿服務？';
-      answer = '依據商家官方簡介：提供獨立住宿空間與專人看護。';
-      sourceType = '商家官方簡介';
-    } else if (req.includes('不關籠')) {
-      question = '住宿是否提供「不關籠」照護？';
-      answer = '依據顧客評論紀錄：館內日間設有遊戲大廳專人陪伴。';
-    }
-
-    return { question, answer, sourceType, sourceUrl };
-  });
-
-  return { generalSummary, faqHighlights };
-};
+// Google 規定的文字標示：不可翻譯、不可換行、不可改大小寫；字色 #5E5E5E、12–16px、Roboto 400
+const GoogleMapsAttribution = () => (
+  <span
+    translate="no"
+    style={{ fontFamily: 'Roboto, Arial, sans-serif', fontWeight: 400, fontSize: 12, color: '#5E5E5E', whiteSpace: 'nowrap' }}
+  >
+    Google Maps
+  </span>
+);
 
 export default function FullMapAIPortal() {
   const [coins, setCoins] = useState(2000);
@@ -230,6 +156,19 @@ export default function FullMapAIPortal() {
   const [isAiTyping, setIsAiTyping] = useState(false); 
   
   const [selectedDetailStore, setSelectedDetailStore] = useState<Store | null>(null);
+  const [isDetailsLoading, setIsDetailsLoading] = useState(false);
+  const [expandedReviews, setExpandedReviews] = useState<Set<number>>(new Set());
+  const [notice, setNotice] = useState<string | null>(null);
+  // 年齡依「今天」計算，只在瀏覽器端算，避免伺服器預先產生的畫面日期不同造成 React hydration 錯誤
+  const [hasMounted, setHasMounted] = useState(false);
+  useEffect(() => { setHasMounted(true); }, []);
+
+  const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const showNotice = (text: string) => {
+    setNotice(text);
+    if (noticeTimer.current) clearTimeout(noticeTimer.current);
+    noticeTimer.current = setTimeout(() => setNotice(null), 4000);
+  };
   const [isSheetExpanded, setIsSheetExpanded] = useState(false);
 
   const [lastKeyword, setLastKeyword] = useState('寵物');
@@ -523,81 +462,48 @@ export default function FullMapAIPortal() {
         mapRef.current.setZoom(15);
       }
 
-      const res = await fetch(`/api/places?keyword=${encodeURIComponent(keyword)}&lat=${searchLat}&lng=${searchLng}&t=${new Date().getTime()}`);
-      if (!res.ok) throw new Error('API Error');
-      
+      const res = await fetch(`/api/places?keyword=${encodeURIComponent(keyword)}&lat=${searchLat}&lng=${searchLng}`);
+      if (!res.ok) throw new Error(`店家搜尋失敗（${res.status}）`);
+
       const data = await res.json();
-      if (data.results && data.results.length > 0) {
-        const { essential, optional } = parseStructuredRequirements(keyword);
-        const allUserReqs = [...essential, ...optional];
+      const defaultImg = petProfile.type === 'dog'
+        ? 'https://images.unsplash.com/photo-1548199973-03cce0bbc87b?auto=format&fit=crop&w=600&q=80'
+        : 'https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?auto=format&fit=crop&w=600&q=80';
 
-        let allFetchedStores: Store[] = data.results.map((place: any, index: number) => {
-          const rating = place.rating || 4.5;
-          const reviewsCount = place.user_ratings_total || Math.floor(Math.random() * 50) + 10;
-          const distanceKm = calculateDistance(searchLat, searchLng, place.geometry?.location?.lat || searchLat, place.geometry?.location?.lng || searchLng);
-          const distanceText = distanceKm < 1 ? `${Math.round(distanceKm * 1000)}m` : `${distanceKm.toFixed(1)}km`;
+      // 全部由 Google 的真實資料組成；評論、營業時間等在 AI 評估或點開店家時才補上
+      const allFetchedStores: Store[] = (data.results || []).map((place: any) => {
+        const lat = place.geometry.location.lat;
+        const lng = place.geometry.location.lng;
+        const distanceKm = calculateDistance(searchLat, searchLng, lat, lng);
+        return {
+          id: place.place_id,
+          name: place.name || '寵物服務',
+          lat, lng,
+          rating: typeof place.rating === 'number' ? place.rating : null,
+          reviewsCount: typeof place.user_ratings_total === 'number' ? place.user_ratings_total : null,
+          address: place.formatted_address || '地址資訊未提供',
+          photoUrl: place.photoUrl || defaultImg,
+          photoAttributions: Array.isArray(place.photoAttributions) ? place.photoAttributions : [],
+          detailsToken: place.detailsToken || '',
+          distanceKm,
+          distanceText: distanceKm < 1 ? `${Math.round(distanceKm * 1000)}m` : `${distanceKm.toFixed(1)}km`,
+        };
+      });
 
-          const defaultImg = petProfile.type === 'dog' 
-            ? 'https://images.unsplash.com/photo-1548199973-03cce0bbc87b?auto=format&fit=crop&w=600&q=80'
-            : 'https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?auto=format&fit=crop&w=600&q=80';
-
-          const aiDetails = generateDynamicAiAnalysis(place.name, keyword, rating, reviewsCount, place.place_id, allUserReqs);
-          const { tags, allEssentialMet } = evaluateStoreRequirements(place.name, essential, optional, place.place_id || String(index));
-
-          return {
-            id: place.place_id || `place_${index}`,
-            name: place.name || '寵物服務',
-            category: 'general',
-            lat: place.geometry?.location?.lat || searchLat,
-            lng: place.geometry?.location?.lng || searchLng,
-            rating, reviewsCount,
-            address: place.formatted_address || place.vicinity || '地址資訊未提供',
-            phone: '營業資訊請參考官方網站',
-            openingHours: '營業時間請洽官方',
-            website: `https://www.google.com/maps/place/?q=place_id:${place.place_id}`,
-            price: '需洽詢',
-            photoUrl: place.photoUrl || defaultImg,
-            distanceKm, distanceText,
-            requirementsStatus: tags,
-            allEssentialMet,
-            aiSummary: aiDetails.generalSummary,
-            aiDetails
-          };
-        });
-
-        const qualifiedStores = allFetchedStores.filter(s => s.allEssentialMet);
-        
-        setStores(allFetchedStores); 
-
-        if (showCards) {
-          if (qualifiedStores.length > 0) {
-            const sortedForCards = [...qualifiedStores].sort((a, b) => {
-              const metCountA = a.requirementsStatus.filter(r => r.met).length;
-              const metCountB = b.requirementsStatus.filter(r => r.met).length;
-              return (metCountB * 100 - (b.distanceKm || 0)) - (metCountA * 100 - (a.distanceKm || 0));
-            });
-            const topStores = sortedForCards.slice(0, 3);
-            setDisplayedStores(topStores);
-            return topStores;
-          } else {
-            setDisplayedStores([]); 
-            return [];
-          }
-        } else {
-          setDisplayedStores([]);
-          return allFetchedStores;
-        }
-
-      } else {
-        setStores([]);
-        setDisplayedStores([]);
-        return [];
-      }
-    } catch (error) {
+      setStores(allFetchedStores);
+      // 卡片：搜尋點 3 公里內的店家依 Google 的相關性排序取前三家；
+      // Google 的位置偏好不是硬性範圍，可能混入很遠的店，不足三家時用最近的補上
+      const nearby = allFetchedStores.filter(st => (st.distanceKm ?? 0) <= CARD_RADIUS_KM);
+      const byDistance = [...allFetchedStores].sort((a, b) => (a.distanceKm ?? 0) - (b.distanceKm ?? 0));
+      const cards = [...nearby, ...byDistance.filter(st => !nearby.includes(st))].slice(0, 3);
+      setDisplayedStores(showCards ? cards : []);
+      return allFetchedStores;
+    } catch (error: any) {
       console.error(error);
       setStores([]);
       setDisplayedStores([]);
-      return [];
+      showNotice('店家搜尋暫時無法使用，請稍後再試。');
+      return null;
     } finally {
       setIsLoading(false);
     }
@@ -642,6 +548,14 @@ export default function FullMapAIPortal() {
 
         const latestStores = await searchGooglePlaces(finalKeyword, 'gps', targetLat, targetLng, true);
 
+        if (latestStores === null) {
+           const errMsg = '抱歉，店家搜尋暫時無法使用，請稍後再試一次。';
+           setMessages(prev => [...prev, { sender: 'ai', text: errMsg }]);
+           speakText(errMsg);
+           setIsAiTyping(false);
+           return;
+        }
+
         if (latestStores.length === 0) {
            const noResultMsg = '抱歉，系統在該地區附近暫時找不到符合條件的店家。';
            setMessages(prev => [...prev, { sender: 'ai', text: noResultMsg }]);
@@ -650,35 +564,10 @@ export default function FullMapAIPortal() {
            return;
         }
 
-        const evalRes = await fetch('/api/chat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            prompt: text,
-            petProfile: petProfile,
-            history: [...newHistory.slice(1), { sender: 'ai', text: chatData.reply }].map(m => ({ 
-              role: m.sender === 'ai' ? 'model' : 'user', 
-              content: m.text 
-            })),
-            contextStores: latestStores,
-            isEvaluationPhase: true
-          })
-        });
-
-        const evalData = await evalRes.json();
-        
-        if (evalData.reply) {
-          setMessages(prev => [...prev, { sender: 'ai', text: evalData.reply }]);
-          speakText(evalData.reply); 
-          
-          if (evalData.recommendedIds && Array.isArray(evalData.recommendedIds)) {
-            if (evalData.recommendedIds.length > 0) {
-              setDisplayedStores(latestStores.filter((store: Store) => evalData.recommendedIds.includes(store.id)));
-            } else {
-               setDisplayedStores([]);
-            }
-          }
-        }
+        // 不再由 AI 判斷店家是否符合條件（Google 條款限制以地圖內容產生新內容）。
+        // 卡片顯示 Google 依關鍵字相關性排序的前三家，點開可看 Google 上的原始資料與評論。
+        const doneMsg = '已在地圖上標出相關的店家，點開卡片可以查看 Google 上的營業時間、電話與評論。';
+        setMessages(prev => [...prev, { sender: 'ai', text: doneMsg }]);
       }
     } catch (err) {
       const errorMsg = '請求發生錯誤，後端可能尚未準備好。';
@@ -689,13 +578,32 @@ export default function FullMapAIPortal() {
     }
   };
 
-  const openDetailModal = (store: Store) => {
+  const openDetailModal = async (store: Store) => {
     setSelectedDetailStore(store);
+    setExpandedReviews(new Set());
     setIsSheetExpanded(false);
     if (window.innerWidth < 768) setIsAiBoxMinimized(true); 
     
     if (mapRef.current) {
       mapRef.current.panTo({ lat: store.lat, lng: store.lng });
+    }
+
+    // 還沒有詳細資料（例如從快速分類進來）時，點開才向 Google 取評論與營業時間
+    if (!store.details) {
+      setIsDetailsLoading(true);
+      try {
+        const res = await fetch(`/api/place-details?id=${encodeURIComponent(store.id)}&token=${encodeURIComponent(store.detailsToken)}`);
+        if (!res.ok) throw new Error(String(res.status));
+        const { details } = await res.json();
+        const update = (st: Store) => (st.id === store.id ? { ...st, details } : st);
+        setStores(prev => prev.map(update));
+        setDisplayedStores(prev => prev.map(update));
+        setSelectedDetailStore(prev => (prev && prev.id === store.id ? { ...prev, details } : prev));
+      } catch {
+        showNotice('店家詳細資料暫時無法取得。');
+      } finally {
+        setIsDetailsLoading(false);
+      }
     }
   };
 
@@ -819,7 +727,7 @@ export default function FullMapAIPortal() {
                 {petProfile.name}
               </span>
               <span className="text-[10px] text-[#A67C52] font-bold leading-none mt-0.5">
-                {petProfile.breed} • {calculateAge(petProfile.birthday)}
+                {petProfile.breed}{hasMounted ? ` • ${calculateAge(petProfile.birthday)}` : ''}
               </span>
             </div>
             <Edit3 className="w-3.5 h-3.5 text-[#B88746] ml-1 opacity-70 group-hover:opacity-100" />
@@ -988,38 +896,29 @@ export default function FullMapAIPortal() {
               <div className="relative w-[120px] md:w-[140px] h-full shrink-0">
                 <img src={store.photoUrl} alt={store.name} className="w-full h-full object-cover" />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent"></div>
+                {store.photoAttributions.length > 0 && (
+                  <span className="absolute top-1.5 left-1.5 right-1.5 text-[9px] leading-tight text-white/85 truncate drop-shadow">
+                    相片：{store.photoAttributions[0].displayName}
+                  </span>
+                )}
                 
                 <div className="absolute bottom-2 left-2 right-2 flex flex-col space-y-1">
                    <span className="bg-[#4D8B6F]/90 backdrop-blur-md text-white text-[10px] font-bold px-1.5 py-0.5 rounded-md flex items-center w-max">
                     <Navigation className="w-2.5 h-2.5 mr-0.5" />
                     {store.distanceText}
                   </span>
-                  <div className="bg-white/95 backdrop-blur-sm px-1.5 py-0.5 rounded-lg shadow-sm flex items-center w-max">
-                    <Star className="w-3 h-3 text-amber-500 fill-current" />
-                    <span className="font-extrabold text-xs text-[#38312D] ml-0.5">{store.rating}</span>
-                  </div>
+                  {store.rating !== null && (
+                    <div className="bg-white/95 backdrop-blur-sm px-1.5 py-0.5 rounded-lg shadow-sm flex items-center w-max">
+                      <Star className="w-3 h-3 text-amber-500 fill-current" />
+                      <span className="font-extrabold text-xs text-[#38312D] ml-0.5">{store.rating}</span>
+                    </div>
+                  )}
                 </div>
               </div>
               
               <div className="p-3 md:p-4 flex flex-col flex-1 relative justify-center overflow-hidden">
                 <h3 className="font-black text-[#38312D] text-sm md:text-base leading-tight line-clamp-1 pr-6 mb-1">{store.name}</h3>
                 
-                <div className="flex items-center space-x-1 my-1 flex-wrap gap-y-1">
-                  {store.requirementsStatus?.map((req, i) => (
-                    <span 
-                      key={i} 
-                      className={`text-[10px] font-extrabold px-1.5 py-0.5 rounded-md flex items-center ${
-                        req.met 
-                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/60' 
-                          : 'bg-rose-50 text-rose-600 border border-rose-200/60'
-                      }`}
-                    >
-                      {req.met ? <CheckCircle2 className="w-2.5 h-2.5 mr-0.5" /> : <XCircle className="w-2.5 h-2.5 mr-0.5" />}
-                      {req.label}
-                    </span>
-                  ))}
-                </div>
-
                 <p className="text-xs text-[#A67C52] flex items-center line-clamp-1 mt-1 font-medium">
                   <MapPin className="w-3 h-3 mr-1 text-[#B88746] shrink-0" />
                   <span className="truncate">{store.address}</span>
@@ -1044,7 +943,7 @@ export default function FullMapAIPortal() {
             <div className="w-12 h-1.5 bg-[#D8C9BC] rounded-full"></div>
             <div className="flex items-center text-[10px] text-[#A67C52] font-bold mt-1">
               {isSheetExpanded ? <ChevronDown className="w-3 h-3 mr-0.5" /> : <ChevronUp className="w-3 h-3 mr-0.5" />}
-              <span>{isSheetExpanded ? '下滑縮小看雙針地圖' : '向上展開看完整 AI 分析'}</span>
+              <span>{isSheetExpanded ? '下滑縮小看雙針地圖' : '向上展開看營業時間與評論'}</span>
             </div>
           </div>
 
@@ -1052,6 +951,18 @@ export default function FullMapAIPortal() {
             <div className="relative h-[140px] md:h-64 w-full shrink-0">
               <img src={selectedDetailStore.photoUrl} alt={selectedDetailStore.name} className="w-full h-full object-cover" />
               <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent"></div>
+              {selectedDetailStore.photoAttributions.length > 0 && (
+                <div className="absolute top-3.5 left-4 right-16 text-[10px] text-white/80 font-medium truncate">
+                  相片：{selectedDetailStore.photoAttributions.map((a, i) => (
+                    <React.Fragment key={i}>
+                      {i > 0 && '、'}
+                      {a.uri
+                        ? <a href={a.uri} target="_blank" rel="noopener noreferrer" className="underline">{a.displayName}</a>
+                        : a.displayName}
+                    </React.Fragment>
+                  ))}
+                </div>
+              )}
               
               <button 
                 onClick={(e) => { e.stopPropagation(); setSelectedDetailStore(null); }} 
@@ -1066,10 +977,15 @@ export default function FullMapAIPortal() {
                     <Navigation className="w-2.5 h-2.5 mr-0.5" />
                     距離 {selectedDetailStore.distanceText}
                   </span>
-                  <div className="flex items-center text-amber-400 bg-black/30 backdrop-blur-md px-2 py-0.5 rounded-lg ring-1 ring-white/20">
-                    <Star className="w-3.5 h-3.5 fill-current" />
-                    <span className="text-xs font-extrabold ml-1 text-white">{selectedDetailStore.rating}</span>
-                  </div>
+                  {selectedDetailStore.rating !== null && (
+                    <div className="flex items-center text-amber-400 bg-black/30 backdrop-blur-md px-2 py-0.5 rounded-lg ring-1 ring-white/20">
+                      <Star className="w-3.5 h-3.5 fill-current" />
+                      <span className="text-xs font-extrabold ml-1 text-white">{selectedDetailStore.rating}</span>
+                      {selectedDetailStore.reviewsCount !== null && (
+                        <span className="text-[10px] ml-1 text-white/70">({selectedDetailStore.reviewsCount})</span>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <h2 className="text-white text-lg md:text-2xl font-black leading-tight shadow-sm truncate">{selectedDetailStore.name}</h2>
               </div>
@@ -1081,81 +997,100 @@ export default function FullMapAIPortal() {
                   <MapPin className="w-4 h-4 mr-2.5 text-[#B88746] mt-0.5 shrink-0" />
                   <span className="leading-relaxed">{selectedDetailStore.address}</span>
                 </div>
-                <div className="flex items-center text-xs md:text-sm text-[#4A423D] font-medium">
-                  <Clock className="w-4 h-4 mr-2.5 text-[#4D8B6F] shrink-0" />
-                  <span>{selectedDetailStore.openingHours || '今日營業 • 09:30 - 21:00'}</span>
+                <div className="flex justify-end -mt-1">
+                  <GoogleMapsAttribution />
                 </div>
-                <div className="flex items-center text-xs md:text-sm text-[#4A423D] font-medium">
-                  <Phone className="w-4 h-4 mr-2.5 text-blue-600 shrink-0" />
-                  <span>{selectedDetailStore.phone || '03-571-2345'}</span>
-                </div>
+                {isDetailsLoading && !selectedDetailStore.details && (
+                  <div className="text-xs text-[#A67C52] font-medium pl-6">正在讀取營業時間與 Google 評論…</div>
+                )}
+                {selectedDetailStore.details && (
+                  <>
+                    <div className="flex items-start text-xs md:text-sm text-[#4A423D] font-medium">
+                      <Clock className="w-4 h-4 mr-2.5 text-[#4D8B6F] mt-0.5 shrink-0" />
+                      <span>
+                        {selectedDetailStore.details.openNow === true && <span className="text-[#4D8B6F] font-bold mr-1.5">營業中</span>}
+                        {selectedDetailStore.details.openNow === false && <span className="text-rose-600 font-bold mr-1.5">休息中</span>}
+                        {todayHours(selectedDetailStore.details.weekdayHours) || '未提供營業時間'}
+                      </span>
+                    </div>
+                    {selectedDetailStore.details.phone && (
+                      <div className="flex items-center text-xs md:text-sm text-[#4A423D] font-medium">
+                        <Phone className="w-4 h-4 mr-2.5 text-blue-600 shrink-0" />
+                        <span>{selectedDetailStore.details.phone}</span>
+                      </div>
+                    )}
+                  </>
+                )}
                 <div className="flex items-center text-xs md:text-sm font-bold pt-0.5">
                   <Globe className="w-4 h-4 mr-2.5 text-[#B88746] shrink-0" />
                   <a 
-                    href={selectedDetailStore.website || `https://www.google.com/maps/place/?q=place_id:${selectedDetailStore.id}`}
+                    href={selectedDetailStore.details?.website || selectedDetailStore.details?.googleMapsUri || `https://www.google.com/maps/place/?q=place_id:${selectedDetailStore.id}`}
                     target="_blank" 
                     rel="noopener noreferrer"
                     className="text-[#B88746] hover:text-[#A67C52] underline truncate flex items-center space-x-1"
                   >
-                    <span>前往店家官方網站 / 專頁</span>
+                    <span>{selectedDetailStore.details?.website ? '前往店家官方網站' : '在 Google 地圖查看'}</span>
                     <ExternalLink className="w-3 h-3 ml-0.5 inline" />
                   </a>
                 </div>
               </div>
 
-              <div className="px-5 py-4">
-                <div className="flex items-center space-x-2 mb-2">
-                  <div className="bg-[#F7EFE5] p-1 rounded-lg text-[#B88746]">
-                    <Sparkles className="w-3.5 h-3.5" />
+              {selectedDetailStore.details && selectedDetailStore.details.reviews.length > 0 && (
+                <div className="px-5 pb-4">
+                  <div className="flex items-center justify-between mb-1">
+                    <h3 className="text-xs md:text-sm font-black text-[#38312D] flex items-center">
+                      <span className="w-1.5 h-3.5 rounded-full bg-[#4D8B6F] mr-2"></span>
+                      Google 評論
+                    </h3>
+                    <GoogleMapsAttribution />
                   </div>
-                  <h3 className="text-xs md:text-sm font-black text-[#38312D]">AI 評論觀點總結</h3>
-                </div>
-                <div className="bg-[#FBF6EE] border border-[#E8DFD8] rounded-2xl p-3.5 text-xs md:text-sm text-[#4A423D] leading-relaxed font-semibold whitespace-pre-line">
-                  {selectedDetailStore.aiSummary}
-                </div>
-              </div>
-
-              <div className="px-5 pb-4">
-                <h3 className="text-xs md:text-sm font-black text-[#38312D] mb-3 flex items-center">
-                  <span className="w-1.5 h-3.5 rounded-full bg-[#B88746] mr-2"></span>
-                  為 {petProfile.name} 整理的需求核實佐證
-                </h3>
-                <div className="space-y-3">
-                  {selectedDetailStore.aiDetails?.faqHighlights?.map((faq, i) => (
-                    <div key={i} className="bg-white ring-1 ring-[#E8DFD8] rounded-2xl p-3.5 shadow-sm space-y-2">
-                      <div className="text-xs font-black text-[#38312D] flex items-center justify-between">
-                        <div className="flex items-center">
-                          <span className="text-[#B88746] mr-1.5 font-black">Q</span>
-                          {faq.question}
+                  <p className="text-[10px] text-[#8C7A6B] mb-2.5">
+                    依 Google 預設的相關性排序，顯示前 {Math.min(3, selectedDetailStore.details.reviews.length)} 則，未經篩選或改寫。
+                    <a href="https://support.google.com/contributionpolicy/answer/7422880" target="_blank" rel="noopener noreferrer" className="underline ml-1">Google 地圖評論政策</a>
+                  </p>
+                  <div className="space-y-2.5">
+                    {selectedDetailStore.details.reviews.slice(0, 3).map((r, i) => (
+                      <div key={i} className="bg-white ring-1 ring-[#E8DFD8] rounded-2xl p-3 text-[11px] text-[#4A423D] leading-relaxed">
+                        <div className="flex items-center gap-2 mb-1.5">
+                          {r.authorPhotoUri
+                            ? <img src={r.authorPhotoUri} alt="" referrerPolicy="no-referrer" className="w-6 h-6 rounded-full shrink-0" />
+                            : <span className="w-6 h-6 rounded-full bg-[#F0E8DF] shrink-0" />}
+                          <span className="font-bold text-[#38312D] truncate flex-1 min-w-0">
+                            {r.authorUri
+                              ? <a href={r.authorUri} target="_blank" rel="noopener noreferrer" className="hover:underline">{r.author}</a>
+                              : r.author}
+                          </span>
+                          <span className="text-[10px] text-[#A67C52] shrink-0">
+                            {r.rating !== null && `${r.rating} ★・`}{r.relativeTime}
+                          </span>
                         </div>
-                        <a 
-                          href={faq.sourceUrl}
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center space-x-1 px-2.5 py-1 bg-[#F7EFE5] hover:bg-[#B88746] text-[#B88746] hover:text-white rounded-lg text-[10px] font-bold transition-colors border border-[#E8DFD8] shrink-0"
+                        {/* 預設顯示四行，點一下展開全文（評論不得被截斷成片面內容） */}
+                        <p
+                          className={expandedReviews.has(i) ? '' : 'line-clamp-4 cursor-pointer'}
+                          onClick={() => setExpandedReviews(prev => new Set(prev).add(i))}
                         >
-                          <FileText className="w-3 h-3 mr-0.5" />
-                          <span>來源：{faq.sourceType} ↗</span>
-                        </a>
-                      </div>
-                      
-                      <div className="text-xs text-[#6E5A4D] font-bold pl-3 border-l-2 border-[#B88746]">
-                        {faq.answer}
-                      </div>
-
-                      {faq.quoteText && (
-                        <div className="bg-[#FAF6F0] rounded-xl p-2.5 text-[11px] text-[#8C7A6B] font-medium leading-relaxed flex items-start space-x-1.5">
-                          <Quote className="w-3.5 h-3.5 text-[#B88746] shrink-0 mt-0.5 rotate-180" />
-                          <div className="flex-1">
-                            <span>{faq.quoteText}</span>
-                            <span className="block text-[10px] text-[#B88746] font-bold mt-1">— {faq.authorInfo}</span>
-                          </div>
+                          {r.text}
+                        </p>
+                        {!expandedReviews.has(i) && r.text.length > 90 && (
+                          <button type="button" onClick={() => setExpandedReviews(prev => new Set(prev).add(i))} className="text-[10px] font-bold text-[#B88746] mt-0.5">
+                            展開全文
+                          </button>
+                        )}
+                        <div className="flex items-center gap-3 mt-1.5 text-[10px] text-[#A67C52]">
+                          {r.translated && <span>由 Google 翻譯</span>}
+                          {r.url && <a href={r.url} target="_blank" rel="noopener noreferrer" className="underline">在 Google 地圖查看原文</a>}
+                          {r.flagUrl && <a href={r.flagUrl} target="_blank" rel="noopener noreferrer" className="underline">檢舉</a>}
                         </div>
-                      )}
-                    </div>
-                  ))}
+                      </div>
+                    ))}
+                  </div>
+                  {selectedDetailStore.details.googleMapsUri && (
+                    <a href={selectedDetailStore.details.googleMapsUri} target="_blank" rel="noopener noreferrer" className="inline-block mt-2 text-[11px] font-bold text-[#B88746] underline">
+                      在 Google 地圖看全部評論 ↗
+                    </a>
+                  )}
                 </div>
-              </div>
+              )}
             </div>
           </div>
 
@@ -1169,13 +1104,24 @@ export default function FullMapAIPortal() {
                 LINE
               </button>
 
-              <a 
-                href={`tel:${selectedDetailStore.phone || '03-571-2345'}`}
-                className="flex-[0.8] bg-[#F7F2EA] hover:bg-[#E8DFD8] text-[#38312D] font-black text-xs sm:text-sm py-3 rounded-2xl flex items-center justify-center transition-all active:scale-95"
-              >
-                <Phone className="w-3.5 h-3.5 mr-1 text-blue-600" />
-                通話
-              </a>
+              {selectedDetailStore.details?.phone ? (
+                <a 
+                  href={telHref(selectedDetailStore.details.phone)}
+                  className="flex-[0.8] bg-[#F7F2EA] hover:bg-[#E8DFD8] text-[#38312D] font-black text-xs sm:text-sm py-3 rounded-2xl flex items-center justify-center transition-all active:scale-95"
+                >
+                  <Phone className="w-3.5 h-3.5 mr-1 text-blue-600" />
+                  通話
+                </a>
+              ) : (
+                <span
+                  aria-disabled="true"
+                  title={isDetailsLoading ? '正在讀取電話' : 'Google 上沒有這家店的電話'}
+                  className="flex-[0.8] bg-[#F7F2EA] text-[#38312D]/40 font-black text-xs sm:text-sm py-3 rounded-2xl flex items-center justify-center cursor-not-allowed"
+                >
+                  <Phone className="w-3.5 h-3.5 mr-1" />
+                  通話
+                </span>
+              )}
 
               <button 
                 onClick={handleNavigate}
@@ -1392,6 +1338,12 @@ export default function FullMapAIPortal() {
       )}
 
       {/* 定位載入中 UI */}
+      {notice && (
+        <div role="status" className="absolute top-20 md:top-6 left-1/2 -translate-x-1/2 z-[90] bg-[#38312D]/90 backdrop-blur-md text-white text-xs md:text-sm font-bold px-4 py-2.5 rounded-full shadow-lg pointer-events-none max-w-[90vw] text-center">
+          {notice}
+        </div>
+      )}
+
       {locationStatus === 'loading' && (
         <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-[#FAF6F0]/80 backdrop-blur-sm">
           <div className="bg-white rounded-3xl p-6 shadow-xl flex flex-col items-center max-w-xs text-center border border-[#E8DFD8]">

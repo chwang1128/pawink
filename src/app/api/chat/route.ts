@@ -15,7 +15,13 @@ export async function POST(req: Request) {
     // （gemini-3.7-flash 已於 2026-10-08 棄用）
     const selectedModel = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
     const body = await req.json();
-    const { prompt, petProfile, contextStores, history, isEvaluationPhase } = body;
+    const { prompt, petProfile, history, isEvaluationPhase } = body;
+
+    // 店家評估階段已停用：Google Maps Platform 條款限制以 Google 地圖內容產生新內容，
+    // 不再由我們把店家資料交給模型判斷。改用 Gemini 官方 Google 地圖工具的版本另案處理。
+    if (isEvaluationPhase) {
+      return NextResponse.json({ error: '店家評估功能已停用' }, { status: 410 });
+    }
 
     const historyText = history && history.length > 0 
       ? history.map((m: any) => `${m.role === 'model' ? 'AI助理' : '家長'}：${m.content}`).join('\n')
@@ -23,8 +29,8 @@ export async function POST(req: Request) {
 
     let systemPrompt = '';
     
-    if (!isEvaluationPhase) {
-      // 階段 1：需求釐清階段
+    {
+      // 需求釐清：判斷要繼續追問，還是可以開始搜尋
       systemPrompt = `你現在是 PetHub 的「專業寵物照護助理」。
 服務毛孩：${petProfile?.name || '毛孩'} (${petProfile?.type === 'dog' ? '狗狗' : '貓咪'})
 品種：${petProfile?.breed || '未填寫'}
@@ -49,28 +55,6 @@ export async function POST(req: Request) {
   "targetArea": "台中市西區" 或 null
 }`;
 
-    } else {
-      // 階段 2：店家評估與推薦階段
-      const simplifiedStores = contextStores ? contextStores.map((s: any) => ({
-        id: s.id, name: s.name, address: s.address, rating: s.rating, features: s.aiSummary
-      })) : [];
-
-      systemPrompt = `你現在是 PetHub 的「專業寵物照護助理」。
-服務毛孩：${petProfile?.name || '毛孩'}
-
-【任務指令：店家評估與卡片聯動】
-家長的需求已經確認。系統剛為你搜尋到以下周邊店家：
-${simplifiedStores.length > 0 ? JSON.stringify(simplifiedStores, null, 2) : '無'}
-
-1. 根據【對話歷史紀錄】中家長確認過的條件，從上方店家清單挑選最適合的推薦。
-2. 嚴格剔除不符合條件的店家。
-3. 【重要】你的回覆 (replyText) 必須「極度簡潔」，只要用一句話告訴家長你推薦了畫面上哪幾家店即可。絕對不要在對話中列出店家的特色、距離或營業時間！詳細原因保留給前端店家卡片展示。
-
-請回傳純 JSON 格式：
-{
-  "replyText": "極度簡潔的推薦文字...",
-  "recommendedStoreIds": ["符合條件的店家ID 1", "店家ID 2"]
-}`;
     }
 
     const finalPrompt = `${systemPrompt}\n\n【對話歷史紀錄】\n${historyText}\n\n【家長最新訊息】\n${prompt}`;
@@ -108,11 +92,10 @@ ${simplifiedStores.length > 0 ? JSON.stringify(simplifiedStores, null, 2) : '無
       parsedResult = {
         action: 'chat',
         replyText: "AI 思考格式異常，請再試一次。",
-        recommendedStoreIds: contextStores?.map((s: any) => s.id) || []
       };
     }
 
-    if (!isEvaluationPhase) {
+    {
       // 指定地區時由 Google 查出真實座標，不採用模型憑記憶給的經緯度。
       const targetArea = typeof parsedResult.targetArea === 'string' ? parsedResult.targetArea.trim() : '';
       let targetLocation: { lat: number; lng: number } | null = null;
@@ -137,11 +120,6 @@ ${simplifiedStores.length > 0 ? JSON.stringify(simplifiedStores, null, 2) : '無
         reply: parsedResult.replyText,
         keyword: parsedResult.keyword || '',
         targetLocation
-      });
-    } else {
-      return NextResponse.json({
-        reply: parsedResult.replyText,
-        recommendedIds: parsedResult.recommendedStoreIds || []
       });
     }
 
