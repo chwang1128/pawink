@@ -260,7 +260,7 @@ export default function FullMapAIPortal() {
   };
 
   const [messages, setMessages] = useState<Array<{ sender: 'ai' | 'user'; text: string }>>([
-    { sender: 'ai', text: `您好！我是 Pawink AI 助理 🐾 已為您載入【${petProfile.name}】的專屬檔案。請告訴我您的需求，我將啟動 Google Gemini 大語言模型為您服務！` }
+    { sender: 'ai', text: `嗨！我是 Pawink 毛孩助理 🐾 想幫【${petProfile.name}】找什麼？可以直接說，例如「附近的動物醫院」「下週出國要寄宿」，也可以問照顧上的問題。` }
   ]);
   
   const [inputQuery, setInputQuery] = useState('');
@@ -544,7 +544,10 @@ export default function FullMapAIPortal() {
     }
   }, [stores, displayedStores, featuredStores, selectedDetailStore, lastSearchMode]);
 
+  // 只有家長用語音提問時才唸出回覆；打字時不出聲，避免在公共場合突然發出聲音
+  const voiceReplyRef = useRef(false);
   const speakText = (text: string) => {
+    if (!voiceReplyRef.current) return;
     if ('speechSynthesis' in window) {
       window.speechSynthesis.cancel();
       const cleanText = text.replace(/[*#]/g, '');
@@ -577,7 +580,8 @@ export default function FullMapAIPortal() {
     recognition.onresult = (event: any) => {
       const transcript = event.results[0][0].transcript;
       setInputQuery(transcript);
-      handleSendMessage(transcript);
+      voiceReplyRef.current = true;
+      handleSendMessage(transcript, true);
     };
 
     recognition.onerror = (event: any) => {
@@ -680,9 +684,10 @@ export default function FullMapAIPortal() {
     }
   };
 
-  const handleSendMessage = async (textToSend?: string) => {
+  const handleSendMessage = async (textToSend?: string, fromVoice = false) => {
     const text = textToSend || inputQuery;
     if (!text.trim()) return;
+    voiceReplyRef.current = fromVoice;
 
     const newHistory = [...messages, { sender: 'user' as const, text }];
     setMessages(newHistory);
@@ -805,12 +810,16 @@ export default function FullMapAIPortal() {
     vacDate.setFullYear(vacDate.getFullYear() + 1);
     const nextVacStr = `${vacDate.getFullYear()}-${String(vacDate.getMonth()+1).padStart(2, '0')}-${String(vacDate.getDate()).padStart(2, '0')}`;
 
-    const healthReport = `✨ 生命檔案已更新！AI 已成功同步【${tempProfile.name}】的健康排程（${calculateAge(tempProfile.birthday)}）：\n\n` + 
-                         `💊 驅蟲防護排程：\n您使用的是「${tempProfile.medBrand}」(${medDesc})。上次投藥日為 ${tempProfile.medLastDate}，AI 已設定將於【${nextMedStr}】推播提醒您再次防護！\n\n` +
-                         `💉 核心疫苗排程：\n「${tempProfile.vaccineName}」需每年補打，預計下次補打日為【${nextVacStr}】。`;
+    // 日期已過就提醒逾期，不說「已設定推播」（目前還沒有推播功能）
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const dueText = (d: Date, s: string) => (d < today ? `【${s}，已逾期，建議儘快安排】` : `【${s}】`);
+    const healthReport = `✨ ${tempProfile.name}的檔案已更新（${calculateAge(tempProfile.birthday)}）\n\n` +
+                         `💊 驅蟲：「${tempProfile.medBrand}」(${medDesc})，上次 ${tempProfile.medLastDate}，下次建議 ${dueText(medDate, nextMedStr)}\n\n` +
+                         `💉 疫苗：「${tempProfile.vaccineName}」每年補打，下次建議 ${dueText(vacDate, nextVacStr)}\n\n` +
+                         `以上日期依你填的資料推算，實際請依獸醫建議。`;
 
     setMessages(prev => [...prev, { sender: 'ai', text: healthReport }]);
-    speakText(`生命檔案已更新！我已經為${tempProfile.name}安排好接下來的健康預防排程囉！`);
+    speakText(`${tempProfile.name}的檔案已更新。`);
     searchGooglePlaces(lastKeyword, 'gps', null, null, false);
     
     if (isAiBoxMinimized) {
@@ -834,9 +843,6 @@ export default function FullMapAIPortal() {
     }
   };
 
-  const handleOpenLine = () => {
-    window.open('https://line.me/R/ti/p/@pethub_taiwan', '_blank');
-  };
 
   const glassmorphism = "bg-[#FFFDF9]/90 backdrop-blur-2xl ring-1 ring-[#E8DFD8] shadow-[0_8px_30px_rgba(74,66,61,0.06)]";
   const hideScrollbarStyle = `
@@ -969,6 +975,22 @@ export default function FullMapAIPortal() {
         </div>
       </header>
 
+      {/* 手機版快速分類（桌面版在頁首）。右側留空給定位按鈕 */}
+      <nav aria-label="快速分類" className="md:hidden absolute top-[64px] left-0 right-16 z-20 pointer-events-auto">
+        <div className="flex gap-2 overflow-x-auto hide-scrollbar px-3 py-1">
+          {QUICK_FILTERS.map(filter => (
+            <button
+              key={filter.label}
+              type="button"
+              onClick={() => searchGooglePlaces(SERVICE_CATEGORIES[filter.category].query, showSearchHereBtn ? 'mapCenter' : 'gps', null, null, true, { category: filter.category })}
+              className="shrink-0 flex items-center gap-1 bg-[#FFFDF9]/95 backdrop-blur-xl ring-1 ring-[#E8DFD8] shadow-sm rounded-full px-3 h-9 text-xs font-bold text-[#4A423D] active:scale-95"
+            >
+              <span aria-hidden="true">{filter.icon}</span>{filter.label}
+            </button>
+          ))}
+        </div>
+      </nav>
+
       {/* 回到我的位置按鈕 */}
       <button 
         onClick={handleReturnToLocation}
@@ -979,7 +1001,7 @@ export default function FullMapAIPortal() {
       </button>
 
       {showSearchHereBtn && (
-        <div className="absolute top-[76px] md:top-24 left-0 right-0 z-20 flex justify-center pointer-events-none animate-in fade-in slide-in-from-top-4">
+        <div className="absolute top-[108px] md:top-24 left-0 right-0 z-20 flex justify-center pointer-events-none animate-in fade-in slide-in-from-top-4">
           <button 
             onClick={() => searchGooglePlaces(lastKeyword, 'mapCenter', null, null, true)}
             className="bg-[#38312D]/90 backdrop-blur-xl shadow-[0_12px_24px_rgba(56,49,45,0.2)] rounded-full px-5 py-2.5 md:px-6 md:py-3 flex items-center space-x-2 text-white pointer-events-auto hover:bg-[#2A2320] transition-all active:scale-95"
@@ -1029,6 +1051,21 @@ export default function FullMapAIPortal() {
                   </div>
                 </div>
               ))}
+              {/* 剛打開時給幾個範例問題，點了就直接送出 */}
+              {messages.length === 1 && !isAiTyping && (
+                <div className="flex flex-wrap gap-2 pl-1">
+                  {['附近的動物醫院', '下週出國，要找寄宿', '附近可以帶狗的餐廳', '狗可以吃葡萄嗎？'].map(q => (
+                    <button
+                      key={q}
+                      type="button"
+                      onClick={() => handleSendMessage(q)}
+                      className="text-xs font-bold text-[#8A6A3E] bg-[#F7F2EA] hover:bg-[#EFE5D8] ring-1 ring-[#E8DFD8] rounded-full px-3 py-2 active:scale-95"
+                    >
+                      {q}
+                    </button>
+                  ))}
+                </div>
+              )}
               {isAiTyping && (
                 <div className="flex justify-start">
                   <div className="p-4 rounded-[20px] max-w-[88%] bg-white ring-1 ring-[#E8DFD8] text-[#38312D] rounded-tl-sm flex items-center space-x-2">
@@ -1391,18 +1428,10 @@ export default function FullMapAIPortal() {
 
           <div className="p-3.5 bg-[#FFFDF9]/90 backdrop-blur-2xl border-t border-[#E8DFD8] shrink-0 pb-safe relative z-20">
             <div className="flex items-center space-x-2">
-              <button 
-                onClick={handleOpenLine}
-                className="flex-1 bg-[#06C755] hover:bg-[#05b34c] text-white font-black text-xs sm:text-sm py-3 rounded-2xl flex items-center justify-center transition-all active:scale-95 shadow-md shadow-emerald-500/15"
-              >
-                <MessageCircle className="w-3.5 h-3.5 mr-1" />
-                LINE
-              </button>
-
               {selectedDetailStore.details?.phone ? (
                 <a 
                   href={telHref(selectedDetailStore.details.phone)}
-                  className="flex-[0.8] bg-[#F7F2EA] hover:bg-[#E8DFD8] text-[#38312D] font-black text-xs sm:text-sm py-3 rounded-2xl flex items-center justify-center transition-all active:scale-95"
+                  className="flex-1 bg-[#F7F2EA] hover:bg-[#E8DFD8] text-[#38312D] font-black text-xs sm:text-sm py-3 rounded-2xl flex items-center justify-center transition-all active:scale-95"
                 >
                   <Phone className="w-3.5 h-3.5 mr-1 text-blue-600" />
                   通話
@@ -1411,7 +1440,7 @@ export default function FullMapAIPortal() {
                 <span
                   aria-disabled="true"
                   title={isDetailsLoading ? '正在讀取電話' : 'Google 上沒有這家店的電話'}
-                  className="flex-[0.8] bg-[#F7F2EA] text-[#38312D]/40 font-black text-xs sm:text-sm py-3 rounded-2xl flex items-center justify-center cursor-not-allowed"
+                  className="flex-1 bg-[#F7F2EA] text-[#38312D]/40 font-black text-xs sm:text-sm py-3 rounded-2xl flex items-center justify-center cursor-not-allowed"
                 >
                   <Phone className="w-3.5 h-3.5 mr-1" />
                   通話
@@ -1659,24 +1688,16 @@ export default function FullMapAIPortal() {
       )}
 
       {/* 定位被拒絕 UI */}
+      {/* 沒有定位：不擋畫面，只在上方提示一次 */}
       {locationStatus === 'denied' && (
-        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-black/40 backdrop-blur-md animate-in fade-in">
-          <div className="bg-white rounded-3xl p-6 shadow-2xl flex flex-col items-center max-w-sm text-center border border-[#E8DFD8]">
-            <div className="w-16 h-16 mb-4 bg-rose-100 rounded-full flex items-center justify-center">
-              <span className="text-3xl">🐶</span>
-            </div>
-            <h3 className="text-[#38312D] font-black text-xl mb-2">我們迷路了！</h3>
-            <p className="text-[#6E5A4D] text-sm font-medium leading-relaxed mb-6">
-              沒有您的位置，系統會像迷路的小狗一樣不知所措。<br/><br/>
-              為了給您最精準的周邊推薦，強烈建議您至瀏覽器設定中<b>「允許存取位置」</b>，然後重新整理網頁喔！
-            </p>
-            <button 
-              onClick={() => setLocationStatus('error')}
-              className="w-full bg-[#B88746] hover:bg-[#A67C52] text-white font-black py-3 rounded-2xl transition-all active:scale-95"
-            >
-              好，我知道了
-            </button>
-          </div>
+        <div role="status" className="absolute z-[25] left-3 right-3 top-[156px] md:top-24 md:left-1/2 md:right-auto md:-translate-x-1/2 md:w-[440px] pointer-events-auto bg-[#FFFDF9]/95 backdrop-blur-xl rounded-2xl shadow-lg ring-1 ring-[#E8DFD8] px-4 py-3 flex items-start gap-3 animate-in fade-in">
+          <MapPin className="w-4 h-4 mt-0.5 text-[#B88746] shrink-0" aria-hidden="true" />
+          <p className="flex-1 text-xs leading-relaxed text-[#4A423D]">
+            沒有取得你的位置，先以<b>台北市大安區</b>為中心。到瀏覽器設定允許「位置」後重新整理，就能找你附近的店；也可以直接跟 AI 說地點。
+          </p>
+          <button type="button" onClick={() => setLocationStatus('error')} aria-label="關閉提示" className="p-1 -m-1 text-[#A67C52] hover:text-[#38312D]">
+            <X className="w-4 h-4" />
+          </button>
         </div>
       )}
     </div>
