@@ -1020,7 +1020,7 @@ export default function FullMapAIPortal() {
       {/* 喚醒懸浮鈕 */}
       {isAiBoxMinimized && (
         <div className={`absolute z-30 flex flex-col items-end pointer-events-auto transition-all duration-400 ease-out right-4 md:right-6 animate-bounce ${
-          (displayedStores.length > 0 || featuredStores.length > 0) && !selectedDetailStore ? 'bottom-[150px] md:bottom-8' : 'bottom-6 md:bottom-8'
+          (displayedStores.length > 0 || featuredStores.length > 0) && !selectedDetailStore ? 'bottom-[176px] md:bottom-8' : 'bottom-9 md:bottom-8'
         }`}>
           
           {!hasOpenedAi && (
@@ -1050,7 +1050,7 @@ export default function FullMapAIPortal() {
 
       {/* 底部店家精選卡片 */}
       {displayedStores.length > 0 && !selectedDetailStore && (
-        <div className="absolute bottom-4 md:bottom-8 left-0 right-0 z-20 px-4 md:px-6 md:pr-[440px] flex space-x-4 overflow-x-auto pb-4 snap-x hide-scrollbar pointer-events-auto">
+        <div className="absolute bottom-7 md:bottom-9 left-0 right-0 z-20 px-4 md:px-6 md:pr-[440px] flex space-x-4 overflow-x-auto pb-2 snap-x hide-scrollbar pointer-events-auto">
           {displayedStores.map((store, index) => (
             <div 
               key={store.id} 
@@ -1106,7 +1106,7 @@ export default function FullMapAIPortal() {
       {featuredStores.length > 0 && displayedStores.length === 0 && !selectedDetailStore && (
         <section
           aria-label="附近店家"
-          className="absolute z-20 pointer-events-auto left-0 right-0 bottom-3 md:right-auto md:left-6 md:bottom-6 md:w-[280px] lg:w-[340px]"
+          className="absolute z-20 pointer-events-auto left-0 right-0 bottom-9 md:right-auto md:left-6 md:bottom-10 md:w-[280px] lg:w-[340px]"
         >
           <h2 className="px-4 md:px-1 mb-2 text-xs font-black text-[#4A423D] tracking-wide flex items-center">
             <span className="bg-[#FFFDF9]/90 backdrop-blur-xl rounded-full px-3 py-1 ring-1 ring-[#E8DFD8] shadow-sm flex items-center">
