@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { searchPlaces, photoProxyUrl, detailsToken, PlacesApiError } from '@/lib/places';
+import { SERVICE_CATEGORIES, isServiceCategory } from '@/lib/service-categories';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,9 +17,19 @@ export async function GET(req: Request) {
   // 只去掉口語贅字。「狗狗」「貓咪」保留，因為「貓咪友善咖啡」這類查詢需要它們。
   const cleanKeyword = rawKeyword.replace(/(\?|？|請問|我要找|想找)/g, '').trim() || '寵物';
 
+  const category = searchParams.get('category');
+  const openNow = searchParams.get('openNow') === '1';
+  // 搜尋偏好半徑：附近 3 公里；指定縣市時由前端放寬（花蓮、台東這類地方店家較分散）
+  const radius = Math.min(Math.max(Number(searchParams.get('radius')) || 3000, 500), 20000);
+
   try {
-    // 半徑 1 公里，與地圖 15 倍放大的視野相符
-    const places = await searchPlaces(cleanKeyword, { lat, lng, radiusMeters: 1000, maxResults: 20 });
+    let places = await searchPlaces(cleanKeyword, { lat, lng, radiusMeters: radius, maxResults: 20, openNow });
+
+    // 依服務類別排除不相干的店，例如找毛孩寄宿時排除一般人住的飯店
+    const exclude = isServiceCategory(category) ? (SERVICE_CATEGORIES[category] as { excludePrimaryTypes?: string[] }).excludePrimaryTypes : undefined;
+    if (exclude?.length) {
+      places = places.filter(p => !p.primaryType || !exclude.includes(p.primaryType));
+    }
 
     // 回傳格式沿用舊版 Places API 的欄位名稱，前端不需要改
     const results = places.map((p) => ({

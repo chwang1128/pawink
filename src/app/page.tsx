@@ -8,6 +8,7 @@ import {
   Edit3, Heart, AlertCircle, Pill, Syringe, Activity, ExternalLink, CheckCircle2, XCircle, FileText, LocateFixed, Mic
   , LogIn, LogOut
 } from 'lucide-react';
+import { SERVICE_CATEGORIES, type ServiceCategoryKey } from '@/lib/service-categories';
 
 interface PetProfile {
   name: string;
@@ -61,13 +62,19 @@ interface Store {
   details?: StoreDetails;
 }
 
-const QUICK_FILTERS = [
-  { icon: '🏥', label: '醫療照護', query: '動物醫院' },
-  { icon: '🏨', label: '寵物住宿', query: '寵物住宿' },
-  { icon: '✂️', label: '美容理容', query: '寵物美容' },
-  { icon: '☕', label: '友善餐廳', query: '寵物餐廳' },
-  { icon: '🕊️', label: '寵物善終', query: '寵物生命紀念 善終' },
+// 快速分類：搜尋詞與 AI 對話共用同一套服務類別（src/lib/service-categories.ts）
+const QUICK_FILTERS: { icon: string; label: string; category: ServiceCategoryKey }[] = [
+  { icon: '🏥', label: '動物醫院', category: 'vet' },
+  { icon: '🏨', label: '寵物寄宿', category: 'boarding' },
+  { icon: '✂️', label: '美容洗澡', category: 'grooming' },
+  { icon: '☕', label: '友善餐廳', category: 'pet_friendly_dining' },
+  { icon: '🕊️', label: '寵物善終', category: 'memorial' },
 ];
+
+// 卡片取搜尋點附近多遠的店：附近 3 公里；指定區域 5 公里；只給縣市時放寬到 15 公里
+const SCOPE_RADIUS_KM = { near: 3, area: 5, broad: 15 } as const;
+type SearchScope = keyof typeof SCOPE_RADIUS_KM;
+interface SearchOptions { category?: ServiceCategoryKey | null; openNow?: boolean; scope?: SearchScope }
 
 const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
   const R = 6371; 
@@ -96,9 +103,6 @@ const calculateAge = (birthday: string) => {
   if (ageYears === 0) return `${ageMonths} 個月`;
   return `${ageYears} 歲${ageMonths > 0 ? ` ${ageMonths} 個月` : ''}`;
 };
-
-// 推薦卡片只取搜尋點附近這個距離內的店家
-const CARD_RADIUS_KM = 3;
 
 // 左下角附近店家版位數量（日後的廣告版位）
 const FEATURED_SLOT_COUNT = 3;
@@ -593,8 +597,11 @@ export default function FullMapAIPortal() {
     searchType: 'gps' | 'mapCenter' = 'gps',
     overrideLat: number | null = null,
     overrideLng: number | null = null,
-    showCards: boolean = true
+    showCards: boolean = true,
+    opts: SearchOptions = {}
   ) => {
+    const scope: SearchScope = opts.scope || 'near';
+    const radiusKm = SCOPE_RADIUS_KM[scope];
     setIsLoading(true);
     setShowSearchHereBtn(false);
     setLastKeyword(keyword);
@@ -616,10 +623,13 @@ export default function FullMapAIPortal() {
 
       if (mapRef.current && searchType !== 'mapCenter') {
         mapRef.current.panTo({ lat: searchLat, lng: searchLng });
-        mapRef.current.setZoom(15);
+        mapRef.current.setZoom(scope === 'broad' ? 12 : scope === 'area' ? 14 : 15);
       }
 
-      const res = await fetch(`/api/places?keyword=${encodeURIComponent(keyword)}&lat=${searchLat}&lng=${searchLng}`);
+      const params = new URLSearchParams({ keyword, lat: String(searchLat), lng: String(searchLng), radius: String(radiusKm * 1000) });
+      if (opts.category) params.set('category', opts.category);
+      if (opts.openNow) params.set('openNow', '1');
+      const res = await fetch(`/api/places?${params}`);
       if (!res.ok) throw new Error(`店家搜尋失敗（${res.status}）`);
 
       const data = await res.json();
@@ -650,7 +660,7 @@ export default function FullMapAIPortal() {
       setStores(allFetchedStores);
       // 卡片：搜尋點 3 公里內的店家依 Google 的相關性排序取前三家；
       // Google 的位置偏好不是硬性範圍，可能混入很遠的店，不足三家時用最近的補上
-      const nearby = allFetchedStores.filter(st => (st.distanceKm ?? 0) <= CARD_RADIUS_KM);
+      const nearby = allFetchedStores.filter(st => (st.distanceKm ?? 0) <= radiusKm);
       const byDistance = [...allFetchedStores].sort((a, b) => (a.distanceKm ?? 0) - (b.distanceKm ?? 0));
       const cards = [...nearby, ...byDistance.filter(st => !nearby.includes(st))].slice(0, 3);
       setDisplayedStores(showCards ? cards : []);
@@ -707,7 +717,11 @@ export default function FullMapAIPortal() {
         const targetLat = chatData.targetLocation?.lat || null;
         const targetLng = chatData.targetLocation?.lng || null;
 
-        const latestStores = await searchGooglePlaces(finalKeyword, 'gps', targetLat, targetLng, true);
+        const latestStores = await searchGooglePlaces(finalKeyword, 'gps', targetLat, targetLng, true, {
+          category: chatData.category || null,
+          openNow: chatData.openNow === true,
+          scope: chatData.scope || 'near',
+        });
 
         if (latestStores === null) {
            const errMsg = '抱歉，店家搜尋暫時無法使用，請稍後再試一次。';
@@ -718,7 +732,9 @@ export default function FullMapAIPortal() {
         }
 
         if (latestStores.length === 0) {
-           const noResultMsg = '抱歉，系統在該地區附近暫時找不到符合條件的店家。';
+           const noResultMsg = chatData.openNow
+             ? '附近暫時找不到「目前營業中」的店家。如果情況緊急，建議直接打給最近的 24 小時動物醫院，或撥 1999 詢問。'
+             : '這個地區附近暫時找不到相關的店家，可以換個地點或說得更具體一點。';
            setMessages(prev => [...prev, { sender: 'ai', text: noResultMsg }]);
            speakText(noResultMsg); 
            setIsAiTyping(false);
@@ -727,7 +743,7 @@ export default function FullMapAIPortal() {
 
         // 不再由 AI 判斷店家是否符合條件（Google 條款限制以地圖內容產生新內容）。
         // 卡片顯示 Google 依關鍵字相關性排序的前三家，點開可看 Google 上的原始資料與評論。
-        const doneMsg = '已在地圖上標出相關的店家，點開卡片可以查看 Google 上的營業時間、電話與評論。';
+        const doneMsg = `🔎 搜尋：${chatData.searchSummary || finalKeyword}\n找到 ${latestStores.length} 家，已標在地圖上。點開卡片可看 Google 上的營業時間、電話與評論。`;
         setMessages(prev => [...prev, { sender: 'ai', text: doneMsg }]);
       }
     } catch (err) {
@@ -864,7 +880,7 @@ export default function FullMapAIPortal() {
             {QUICK_FILTERS.map(filter => (
               <button
                 key={filter.label}
-                onClick={() => searchGooglePlaces(filter.query, showSearchHereBtn ? 'mapCenter' : 'gps', null, null, true)}
+                onClick={() => searchGooglePlaces(SERVICE_CATEGORIES[filter.category].query, showSearchHereBtn ? 'mapCenter' : 'gps', null, null, true, { category: filter.category })}
                 className={`${glassmorphism} flex items-center space-x-2 px-4 py-2.5 rounded-full text-sm font-bold text-[#4A423D] hover:text-[#B88746] hover:bg-[#F7F2EA] transition-all shrink-0`}
               >
                 <span className="text-base">{filter.icon}</span>

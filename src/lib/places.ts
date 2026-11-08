@@ -44,6 +44,8 @@ export interface PlaceSummary {
   userRatingCount: number | null;
   photoName: string | null;
   photoAttributions: Attribution[];
+  // Google 的主要類別（例如 hotel、pet_store），用來排除不相干的結果
+  primaryType: string | null;
 }
 
 const toAttributions = (list: any): Attribution[] =>
@@ -58,6 +60,8 @@ interface SearchTextOptions {
   lng: number;
   radiusMeters?: number;
   maxResults?: number;
+  // 只要目前營業中的店（飼主說「現在」「半夜」「還有開」時）
+  openNow?: boolean;
 }
 
 const SEARCH_FIELDS = [
@@ -68,6 +72,7 @@ const SEARCH_FIELDS = [
   'places.rating',
   'places.userRatingCount',
   'places.photos',
+  'places.primaryType',
 ].join(',');
 
 async function callSearchText(body: Record<string, unknown>, fieldMask: string, apiKey: string) {
@@ -108,6 +113,7 @@ export async function searchPlaces(query: string, opts: SearchTextOptions): Prom
           radius: opts.radiusMeters ?? 1000,
         },
       },
+      ...(opts.openNow ? { openNow: true } : {}),
     },
     SEARCH_FIELDS,
     apiKey,
@@ -126,6 +132,7 @@ export async function searchPlaces(query: string, opts: SearchTextOptions): Prom
       userRatingCount: isNum(p.userRatingCount) ? p.userRatingCount : null,
       photoName: p.photos?.[0]?.name || null,
       photoAttributions: toAttributions(p.photos?.[0]?.authorAttributions),
+      primaryType: typeof p.primaryType === 'string' ? p.primaryType : null,
     }));
 }
 
@@ -232,6 +239,8 @@ export interface ResolvedArea {
   lat: number;
   lng: number;
   label: string;
+  // 縣市等級的大範圍地名（例如「花蓮縣」「台中市」）。只用一個中心點搜尋會漏掉大部分地區，要再問區域或地標
+  broad: boolean;
 }
 
 // 把地名（例如「台中市西區」）轉成座標，用 Text Search 取前五筆，優先挑行政區類型的結果。
@@ -260,6 +269,7 @@ export async function geocodeArea(area: string): Promise<ResolvedArea | null> {
       lat: pick.location.latitude,
       lng: pick.location.longitude,
       label: pick.formattedAddress || pick.displayName?.text || area,
+      broad: (pick.types || []).some((t: string) => t === 'administrative_area_level_1' || t === 'country'),
     };
   } catch (err: any) {
     console.error(`[places] 地名「${area}」查詢失敗：`, err?.message);
