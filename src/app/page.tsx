@@ -1122,8 +1122,8 @@ export default function FullMapAIPortal() {
           
           {aiPeek && (
             <div className="mb-2 w-[min(280px,calc(100vw-32px))] bg-[#FFFDF9] rounded-2xl shadow-xl ring-1 ring-[#E8DFD8] p-3 pr-8 relative animate-in fade-in">
-              <button type="button" onClick={() => { setIsAiBoxMinimized(false); setHasOpenedAi(true); setAiPeek(null); }} className="text-left text-xs leading-relaxed text-[#38312D] line-clamp-4">
-                {aiPeek}
+              <button type="button" onClick={() => { setIsAiBoxMinimized(false); setHasOpenedAi(true); setAiPeek(null); }} className="text-left text-xs leading-relaxed text-[#38312D]">
+                <span className="line-clamp-4">{aiPeek}</span>
                 <span className="block mt-1 font-bold text-[#B88746]">看完整對話 ›</span>
               </button>
               <button type="button" onClick={() => setAiPeek(null)} aria-label="關閉提醒" className="absolute top-2 right-2 p-1 text-[#A67C52]">
