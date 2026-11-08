@@ -1,5 +1,6 @@
 import './globals.css';
 import type { Metadata } from 'next';
+import Providers from '@/components/Providers';
 
 export const metadata: Metadata = {
   title: 'PetHub Taiwan 寵物生態系平台',
@@ -14,7 +15,7 @@ export default function RootLayout({
   return (
     <html lang="zh-TW">
       <body className="bg-slate-100 text-slate-800 font-sans antialiased">
-        {children}
+        <Providers>{children}</Providers>
       </body>
     </html>
   );

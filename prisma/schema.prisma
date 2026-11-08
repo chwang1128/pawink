@@ -1,6 +1,9 @@
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  // Supabase：DATABASE_URL 用 Transaction pooler（port 6543，加 ?pgbouncer=true）給網站連線，
+  // DIRECT_URL 用 Session pooler（port 5432）給資料表遷移使用
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 generator client {
@@ -20,16 +23,56 @@ enum Role {
 
 model User {
   id            String         @id @default(uuid())
-  email         String         @unique
+  // LINE 登入不一定提供 email，所以允許空值
+  email         String?        @unique
+  emailVerified DateTime?
   name          String?
+  image         String?
   avatar        String?
   role          Role           @default(PET_OWNER)
   points        Int            @default(2000)
   pets          Pet[]
   merchant      Merchant?
   appointments  Appointment[]
+  accounts      Account[]
+  sessions      Session[]
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
+}
+
+// ---- 登入（Auth.js / next-auth）使用的資料表 ----
+model Account {
+  id                String  @id @default(uuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(uuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
 }
 
 model Pet {
@@ -40,10 +83,18 @@ model Pet {
   type          PetType
   breed         String?
   ageYears      Int?
+  birthday      DateTime?
   weightKg      Float?
   avatar        String?
+  notes         String?
+  // 驅蟲預防藥
+  medBrand      String?
+  medLastDate   DateTime?
   vaccines      VaccineRecord[]
   createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @default(now()) @updatedAt
+
+  @@index([ownerId])
 }
 
 model VaccineRecord {
