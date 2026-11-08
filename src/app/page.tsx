@@ -881,7 +881,7 @@ export default function FullMapAIPortal() {
               setPetTempProfile(petProfile);
               setIsPetModalOpen(true);
             }}
-            className={`${glassmorphism} hover:bg-[#F7F2EA] transition-all px-3 py-1.5 md:px-4 md:py-2 rounded-full flex items-center space-x-1.5 md:space-x-2 border border-[#E8DFD8] shadow-sm cursor-pointer group min-w-0 whitespace-nowrap`}
+            className={`${glassmorphism} hover:bg-[#F7F2EA] transition-all px-3 py-1.5 md:px-4 md:py-2 rounded-full flex items-center space-x-1.5 md:space-x-2 border border-[#E8DFD8] shadow-sm cursor-pointer group min-w-0 whitespace-nowrap relative after:absolute after:-inset-1 after:content-[''] md:after:hidden`}
           >
             <span className="text-lg leading-none">{petProfile.type === 'dog' ? '🐶' : '🐱'}</span>
             <div className="flex flex-col text-left min-w-0 max-w-[96px] md:max-w-none">
@@ -893,17 +893,18 @@ export default function FullMapAIPortal() {
               </span>
             </div>
             <Edit3 className="hidden md:block w-3.5 h-3.5 text-[#B88746] ml-1 opacity-70 group-hover:opacity-100" />
+            <ChevronDown className="md:hidden w-3 h-3 text-[#B88746] shrink-0" aria-hidden="true" />
           </button>
 
           {/* 帳號：已登入顯示頭像與登出；未登入且已設定登入方式時顯示登入 */}
           {(authStatus === 'authenticated' || authProviders.length > 0) && (
-            <div className="relative">
+            <div className="relative shrink-0">
               <button
                 type="button"
                 onClick={() => setIsAccountMenuOpen(o => !o)}
                 aria-haspopup="menu"
                 aria-expanded={isAccountMenuOpen}
-                className={`${glassmorphism} rounded-full flex items-center justify-center h-9 md:h-10 ${authStatus === 'authenticated' ? 'w-9 md:w-10 p-0.5' : 'px-3 md:px-3.5 text-xs md:text-sm font-black text-[#4A423D] hover:text-[#B88746] whitespace-nowrap'}`}
+                className={`${glassmorphism} relative rounded-full flex items-center justify-center h-9 md:h-10 after:absolute after:-inset-1 after:content-[''] md:after:hidden ${authStatus === 'authenticated' ? 'w-9 md:w-10 p-0.5' : 'px-3 md:px-3.5 text-xs md:text-sm font-black text-[#4A423D] hover:text-[#B88746] whitespace-nowrap'}`}
               >
                 {authStatus === 'authenticated'
                   ? (session?.user?.image
