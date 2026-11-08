@@ -1226,7 +1226,7 @@ export default function FullMapAIPortal() {
           </div>
 
           <div className="flex-1 flex flex-col min-h-0">
-            <div className={`relative ${isSheetExpanded ? 'h-[140px]' : 'h-[104px]'} md:h-64 w-full shrink-0 transition-[height] duration-300`}>
+            <div className={`relative ${isSheetExpanded ? 'h-[140px]' : 'h-[104px]'} md:h-64 max-md:landscape:h-[76px] w-full shrink-0`}>
               <img src={selectedDetailStore.photoUrl} alt={selectedDetailStore.name} className="w-full h-full object-cover" />
               <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent"></div>
               {selectedDetailStore.photoAttributions.length > 0 && (
@@ -1269,7 +1269,7 @@ export default function FullMapAIPortal() {
               </div>
             </div>
 
-            <div className="flex-1 min-h-0 overflow-y-auto hide-scrollbar pb-6 pt-1" onClick={() => { if (!isSheetExpanded && window.innerWidth < 768) setIsSheetExpanded(true); }}>
+            <div className={`flex-1 min-h-0 ${isSheetExpanded ? 'overflow-y-auto' : 'overflow-hidden md:overflow-y-auto'} hide-scrollbar pb-6 pt-1`} onClick={(e) => { if (!isSheetExpanded && window.innerWidth < 768 && !(e.target as HTMLElement).closest('a, button')) setIsSheetExpanded(true); }}>
               <div className="px-5 py-3 flex flex-col space-y-2 border-b border-[#E8DFD8]">
                 <div className="flex items-start text-xs md:text-sm text-[#4A423D] font-medium">
                   <MapPin className="w-4 h-4 mr-2.5 text-[#B88746] mt-0.5 shrink-0" />
