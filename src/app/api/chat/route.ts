@@ -12,6 +12,17 @@ import {
 
 export const runtime = 'nodejs';
 
+const isLatLng = (v: any): v is { lat: number; lng: number } =>
+  v && Number.isFinite(v.lat) && Number.isFinite(v.lng) && Math.abs(v.lat) <= 90 && Math.abs(v.lng) <= 180;
+
+const distanceKm = (a: { lat: number; lng: number }, b: { lat: number; lng: number }) => {
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(b.lat - a.lat);
+  const dLng = toRad(b.lng - a.lng);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 6371 * 2 * Math.asin(Math.sqrt(h));
+};
+
 // 伺服器問「哪一區或哪個地標」時固定用這句開頭；家長回答後仍只說縣市，就不再追問，改用較大範圍搜尋
 const AREA_QUESTION_MARK = '想以哪一區或哪個地標為中心';
 
@@ -82,6 +93,8 @@ export async function POST(req: Request) {
     const selectedModel = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
     const body = await req.json();
     const { prompt, petProfile, history, isEvaluationPhase } = body;
+    // 家長目前位置（瀏覽器定位），用來判斷「說了縣市名，但人就在那個縣市」的情況
+    const userLoc = isLatLng(body.userLocation) ? body.userLocation : null;
 
     // 店家評估階段已停用：Google Maps Platform 條款限制以 Google 地圖內容產生新內容
     if (isEvaluationPhase) {
@@ -139,6 +152,7 @@ export async function POST(req: Request) {
 
     let targetLocation: { lat: number; lng: number } | null = null;
     let scope: 'near' | 'area' | 'broad' = 'near';
+    let areaNote: string | null = null;
     if (targetArea) {
       // 地名由 Google 查出真實座標，不採用模型憑記憶給的經緯度
       const resolved = await geocodeArea(targetArea);
@@ -148,20 +162,27 @@ export async function POST(req: Request) {
           reply: `我在地圖上找不到「${targetArea}」。可以說得更完整一點嗎？例如「花蓮市」「台中市西區」或附近的地標。`,
         });
       }
-      if (resolved.broad) {
-        // 縣市範圍太大：先問一次區域或地標；家長已被問過仍只給縣市，就放寬範圍直接搜尋
+      const urgent = parsed.openNow === true || category === 'emergency_vet';
+      if (resolved.broad && userLoc && distanceKm(userLoc, resolved) <= 20) {
+        // 說了縣市名，而家長就在這個縣市裡：直接以目前位置為中心，不再追問
+        targetLocation = { lat: userLoc.lat, lng: userLoc.lng };
+        scope = 'area';
+        areaNote = `${targetArea}（你目前位置附近）`;
+      } else if (resolved.broad) {
+        // 縣市範圍太大：先問一次區域或地標；緊急情況或家長已被問過仍只給縣市，就放寬範圍直接搜尋
         const lastModel = [...turns].reverse().find(m => m.role === 'model')?.content || '';
-        if (!lastModel.includes(AREA_QUESTION_MARK)) {
+        if (!urgent && !lastModel.includes(AREA_QUESTION_MARK)) {
           return NextResponse.json({
             action: 'chat',
             reply: `${targetArea}範圍很大，${AREA_QUESTION_MARK}呢？例如某個區、車站或景點附近，我會在那附近幫你找。`,
           });
         }
         scope = 'broad';
+        targetLocation = { lat: resolved.lat, lng: resolved.lng };
       } else {
         scope = 'area';
+        targetLocation = { lat: resolved.lat, lng: resolved.lng };
       }
-      targetLocation = { lat: resolved.lat, lng: resolved.lng };
     }
 
     const openNow = parsed.openNow === true;
@@ -175,7 +196,7 @@ export async function POST(req: Request) {
       targetLocation,
       scope,
       // 讓家長知道系統實際搜尋了什麼
-      searchSummary: [label, ...features].join('・') + `｜${targetArea || '你附近'}` + (openNow ? '｜營業中' : ''),
+      searchSummary: [label, ...features].join('・') + `｜${areaNote || targetArea || '你附近'}` + (openNow ? '｜營業中' : ''),
     });
   } catch (error: any) {
     console.error('[api/chat] 錯誤', error?.message);

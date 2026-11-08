@@ -696,6 +696,7 @@ export default function FullMapAIPortal() {
         body: JSON.stringify({
           prompt: text,
           petProfile: petProfile,
+          userLocation: userLocation || null,
           history: newHistory.slice(1).map(m => ({ 
             role: m.sender === 'ai' ? 'model' : 'user', 
             content: m.text 
