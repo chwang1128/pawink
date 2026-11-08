@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { geocodeArea } from '@/lib/places';
 
 export const runtime = 'nodejs';
 
@@ -38,14 +39,14 @@ export async function POST(req: Request) {
 【極重要規則】
 * 若資訊【不足】，請親切提問。⚠️【一次只能問 1 個問題】，絕對不要同時問兩個重點！
 * 若資訊【充足】，請將 action 設為 "search"，並給予精準 keyword（例如「台中市西區 寵物友善餐廳」）。
-* 【跨區導航神技】：若家長有明確指定「其他縣市/地區」（例如：台中、信義區），請憑你的知識在 targetLocation 提供該地區的 GPS 座標 (lat, lng)。如果沒指定地區或是說「附近」，targetLocation 請設為 null。
+* 【跨區搜尋】：若家長有明確指定「其他縣市/地區」（例如：台中、信義區），請在 targetArea 填入完整地名（例如「台中市西區」、「台北市信義區」），系統會自行查詢座標，你不需要提供經緯度。如果沒指定地區或是說「附近」，targetArea 請設為 null。
 
 請回傳純 JSON 格式：
 {
   "action": "chat" 或 "search",
   "replyText": "你的回覆內容（一次只問一個問題）...",
   "keyword": "供 Google Maps 搜尋的關鍵字（若 action 為 search 時才填寫）",
-  "targetLocation": { "lat": 24.1477, "lng": 120.6736 } // 若無指定特定地區則填 null
+  "targetArea": "台中市西區" 或 null
 }`;
 
     } else {
@@ -112,11 +113,30 @@ ${simplifiedStores.length > 0 ? JSON.stringify(simplifiedStores, null, 2) : '無
     }
 
     if (!isEvaluationPhase) {
+      // 指定地區時由 Google 查出真實座標，不採用模型憑記憶給的經緯度。
+      const targetArea = typeof parsedResult.targetArea === 'string' ? parsedResult.targetArea.trim() : '';
+      let targetLocation: { lat: number; lng: number } | null = null;
+
+      if (parsedResult.action === 'search' && targetArea) {
+        const resolved = await geocodeArea(targetArea);
+        if (!resolved) {
+          // 家長明確指定了地區卻查不到位置：不要默默改搜目前位置（會出現錯誤城市的店家），
+          // 改成請家長把地區說得更明確。
+          return NextResponse.json({
+            action: 'chat',
+            reply: `抱歉，我在地圖上找不到「${targetArea}」這個地方。可以告訴我更完整的地名嗎？例如「台中市西區」或「高雄市左營區」。`,
+            keyword: '',
+            targetLocation: null
+          });
+        }
+        targetLocation = { lat: resolved.lat, lng: resolved.lng };
+      }
+
       return NextResponse.json({
         action: parsedResult.action || 'chat',
         reply: parsedResult.replyText,
         keyword: parsedResult.keyword || '',
-        targetLocation: parsedResult.targetLocation || null
+        targetLocation
       });
     } else {
       return NextResponse.json({
