@@ -74,7 +74,7 @@ const QUICK_FILTERS: { icon: string; label: string; category: ServiceCategoryKey
 // 卡片取搜尋點附近多遠的店：附近 3 公里；指定區域 5 公里；只給縣市時放寬到 15 公里
 const SCOPE_RADIUS_KM = { near: 3, area: 5, broad: 15 } as const;
 type SearchScope = keyof typeof SCOPE_RADIUS_KM;
-interface SearchOptions { category?: ServiceCategoryKey | null; openNow?: boolean; scope?: SearchScope }
+interface SearchOptions { category?: ServiceCategoryKey | null; openNow?: boolean; scope?: SearchScope; fallbackKeyword?: string | null; keepChatOpen?: boolean }
 
 const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
   const R = 6371; 
@@ -271,6 +271,8 @@ export default function FullMapAIPortal() {
   // 左下角「附近店家」三個版位：開站時依使用者位置顯示最近的三家。
   // 之後要開放給店家刊登廣告時，從這裡換成付費店家（並加上「贊助」標示）。
   const [featuredStores, setFeaturedStores] = useState<Store[]>([]);
+  // 上一次搜尋是否因結果太少而拿掉了家長指定的條件
+  const lastSearchRelaxedRef = useRef(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isAiTyping, setIsAiTyping] = useState(false); 
   
@@ -613,7 +615,8 @@ export default function FullMapAIPortal() {
     setLastKeyword(keyword);
     setLastSearchMode(searchType); 
     setSelectedDetailStore(null); 
-    if (window.innerWidth < 768 && showCards) setIsAiBoxMinimized(true);
+    if (window.innerWidth < 768 && showCards && !opts.keepChatOpen) setIsAiBoxMinimized(true);
+    lastSearchRelaxedRef.current = false;
 
     try {
       let searchLat = userLocation?.lat || 25.0330;
@@ -635,10 +638,12 @@ export default function FullMapAIPortal() {
       const params = new URLSearchParams({ keyword, lat: String(searchLat), lng: String(searchLng), radius: String(radiusKm * 1000) });
       if (opts.category) params.set('category', opts.category);
       if (opts.openNow) params.set('openNow', '1');
+      if (opts.fallbackKeyword) params.set('fallback', opts.fallbackKeyword);
       const res = await fetch(`/api/places?${params}`);
       if (!res.ok) throw new Error(`店家搜尋失敗（${res.status}）`);
 
       const data = await res.json();
+      lastSearchRelaxedRef.current = data.relaxed === true;
       const defaultImg = petProfile.type === 'dog'
         ? 'https://images.unsplash.com/photo-1548199973-03cce0bbc87b?auto=format&fit=crop&w=600&q=80'
         : 'https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?auto=format&fit=crop&w=600&q=80';
@@ -730,6 +735,8 @@ export default function FullMapAIPortal() {
           category: chatData.category || null,
           openNow: chatData.openNow === true,
           scope: chatData.scope || 'near',
+          fallbackKeyword: chatData.fallbackKeyword || null,
+          keepChatOpen: chatData.medical === true,
         });
 
         if (latestStores === null) {
@@ -752,7 +759,12 @@ export default function FullMapAIPortal() {
 
         // 不再由 AI 判斷店家是否符合條件（Google 條款限制以地圖內容產生新內容）。
         // 卡片顯示 Google 依關鍵字相關性排序的前三家，點開可看 Google 上的原始資料與評論。
-        const doneMsg = `🔎 搜尋：${chatData.searchSummary || finalKeyword}\n找到 ${latestStores.length} 家，已標在地圖上。點開卡片可看 Google 上的營業時間、電話與評論。`;
+        const wants: string[] = Array.isArray(chatData.features) ? chatData.features : [];
+        const wantNote = wants.length === 0 ? ''
+          : lastSearchRelaxedRef.current
+            ? `\n找不到標明「${wants.join('、')}」的店，先列出這一帶全部的店，請打電話問是否符合。`
+            : `\n條件：${wants.join('、')}（店家是否符合，請點開看評論或打電話確認）`;
+        const doneMsg = `🔎 搜尋：${chatData.searchSummary || finalKeyword}${wantNote}\n找到 ${latestStores.length} 家，已標在地圖上。點開卡片可看 Google 上的營業時間、電話與評論。`;
         setMessages(prev => [...prev, { sender: 'ai', text: doneMsg }]);
       }
     } catch (err) {

@@ -72,3 +72,19 @@ export function buildQuery(category: ServiceCategoryKey | null, features: string
   const base = category ? SERVICE_CATEGORIES[category].query : freeQuery;
   return [base, ...features].filter(Boolean).join(' ').trim();
 }
+
+// 台灣不少寵物旅館在 Google 上被設成 lodging（例如「快樂狗寵物安親旅館」）。
+// 店名有寵物相關字、又不是「寵物友善」（人寵同住）的旅宿，視為寵物店家保留。
+const PET_NAME = /(寵物|毛孩|毛小孩|狗|犬|貓|喵|汪|pet|dog|cat|puppy)/i;
+const HUMAN_PET_FRIENDLY = /(友善|friendly)/i;
+
+export function shouldExclude(category: ServiceCategoryKey, place: { name: string; primaryType: string | null }): boolean {
+  const exclude = (SERVICE_CATEGORIES[category] as ServiceCategory).excludePrimaryTypes;
+  if (!exclude?.length || !place.primaryType || !exclude.includes(place.primaryType)) return false;
+  // 店名例外只適用於旅宿類型；寵物用品店等本來就會有寵物字樣，不能因此保留
+  if (HUMAN_LODGING.includes(place.primaryType)) {
+    const looksLikePetBusiness = PET_NAME.test(place.name) && !HUMAN_PET_FRIENDLY.test(place.name);
+    return !looksLikePetBusiness;
+  }
+  return true;
+}

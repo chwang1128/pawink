@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { searchPlaces, photoProxyUrl, detailsToken, PlacesApiError } from '@/lib/places';
-import { SERVICE_CATEGORIES, isServiceCategory } from '@/lib/service-categories';
+import { isServiceCategory, shouldExclude } from '@/lib/service-categories';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,9 +26,17 @@ export async function GET(req: Request) {
     let places = await searchPlaces(cleanKeyword, { lat, lng, radiusMeters: radius, maxResults: 20, openNow });
 
     // 依服務類別排除不相干的店，例如找毛孩寄宿時排除一般人住的飯店
-    const exclude = isServiceCategory(category) ? (SERVICE_CATEGORIES[category] as { excludePrimaryTypes?: string[] }).excludePrimaryTypes : undefined;
-    if (exclude?.length) {
-      places = places.filter(p => !p.primaryType || !exclude.includes(p.primaryType));
+    const keep = (list: typeof places) => (isServiceCategory(category) ? list.filter(p => !shouldExclude(category, p)) : list);
+    places = keep(places);
+
+    // 加了特徵詞（例如「不關籠」）卻少於 3 家：改用基本詞重搜補上，並告訴前端條件已放寬
+    let relaxed = false;
+    const fallback = (searchParams.get('fallback') || '').trim();
+    if (places.length < 3 && fallback && fallback !== cleanKeyword) {
+      const more = keep(await searchPlaces(fallback, { lat, lng, radiusMeters: radius, maxResults: 20, openNow }));
+      const seen = new Set(places.map(p => p.id));
+      places = [...places, ...more.filter(p => !seen.has(p.id))];
+      relaxed = true;
     }
 
     // 回傳格式沿用舊版 Places API 的欄位名稱，前端不需要改
@@ -45,7 +53,7 @@ export async function GET(req: Request) {
       detailsToken: detailsToken(p.id),
     }));
 
-    return NextResponse.json({ results });
+    return NextResponse.json({ results, relaxed });
   } catch (error: any) {
     // 詳細原因只寫進 log；回給瀏覽器的訊息不帶 Google 的錯誤內容。
     // 上游（Google）失敗一律回 502，與「前端參數錯誤」的 400 區分開。

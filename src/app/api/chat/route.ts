@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { geocodeArea } from '@/lib/places';
+import { countyOfName, countyOfPoint } from '@/lib/tw-counties';
 import {
   SERVICE_CATEGORIES,
   SERVICE_CATEGORY_KEYS,
@@ -15,13 +16,6 @@ export const runtime = 'nodejs';
 const isLatLng = (v: any): v is { lat: number; lng: number } =>
   v && Number.isFinite(v.lat) && Number.isFinite(v.lng) && Math.abs(v.lat) <= 90 && Math.abs(v.lng) <= 180;
 
-const distanceKm = (a: { lat: number; lng: number }, b: { lat: number; lng: number }) => {
-  const toRad = (d: number) => (d * Math.PI) / 180;
-  const dLat = toRad(b.lat - a.lat);
-  const dLng = toRad(b.lng - a.lng);
-  const h = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2;
-  return 6371 * 2 * Math.asin(Math.sqrt(h));
-};
 
 // 伺服器問「哪一區或哪個地標」時固定用這句開頭；家長回答後仍只說縣市，就不再追問，改用較大範圍搜尋
 const AREA_QUESTION_MARK = '想以哪一區或哪個地標為中心';
@@ -41,6 +35,9 @@ const buildSystemPrompt = (petProfile: any, nowText: string) => `你是 Pawink �
 - 只說「寵物住宿」而分不出是哪一種時，才問一題：「是毛孩自己寄宿，還是要和你一起住？」
 - 症狀、受傷、誤食、要打針健檢 → vet；夜間、急診、喘、抽搐、站不穩、中毒 → emergency_vet；兔、鼠、鳥、爬蟲、刺蝟等 → exotic_vet。
 - 「寵物公園」若是指讓狗跑的地方 → dog_park（不是連鎖寵物用品店）。
+- 兔、鳥、鼠、爬蟲等特殊寵物急症 → exotic_vet，openNow=true，features 放物種名（例如 兔）。
+- 撿到走失的狗貓 → vet（可免費掃晶片），並提醒可通報各縣市動保處。
+- 寵物計程車、到府美容、到府保母 → other，freeQuery 填「寵物計程車」「到府美容」「寵物保母」。
 
 【什麼時候直接搜尋】
 - 只要判斷得出類別就直接 search，不要先問「要不要幫你找」。
@@ -150,6 +147,16 @@ export async function POST(req: Request) {
       return NextResponse.json({ action: 'chat', reply: '想幫你找店家，可以告訴我是要找哪一類服務嗎？例如動物醫院、美容、寄宿。' });
     }
 
+    const urgent = parsed.openNow === true || category === 'emergency_vet' || (category === 'exotic_vet' && parsed.openNow === true);
+
+    // 沒有說地區、也拿不到家長位置：不要默默用預設的台北搜尋。先給建議，再問在哪裡
+    if (!targetArea && !userLoc) {
+      return NextResponse.json({
+        action: 'chat',
+        reply: `${urgent ? reply + '\n\n' : ''}我還不知道你在哪裡。告訴我縣市和區域或附近地標（例如「板橋車站」），${urgent ? '我馬上找最近的醫院' : '我就幫你找'}；也可以在瀏覽器允許定位。`,
+      });
+    }
+
     let targetLocation: { lat: number; lng: number } | null = null;
     let scope: 'near' | 'area' | 'broad' = 'near';
     let areaNote: string | null = null;
@@ -162,8 +169,9 @@ export async function POST(req: Request) {
           reply: `我在地圖上找不到「${targetArea}」。可以說得更完整一點嗎？例如「花蓮市」「台中市西區」或附近的地標。`,
         });
       }
-      const urgent = parsed.openNow === true || category === 'emergency_vet';
-      if (resolved.broad && userLoc && distanceKm(userLoc, resolved) <= 20) {
+      // 家長目前所在縣市與詢問的縣市相同才用目前位置（人在台北問「新北」時不能搜台北）
+      const askedCounty = countyOfName(targetArea) || countyOfPoint(resolved.lat, resolved.lng);
+      if (resolved.broad && userLoc && countyOfPoint(userLoc.lat, userLoc.lng) === askedCounty) {
         // 說了縣市名，而家長就在這個縣市裡：直接以目前位置為中心，不再追問
         targetLocation = { lat: userLoc.lat, lng: userLoc.lng };
         scope = 'area';
@@ -187,16 +195,25 @@ export async function POST(req: Request) {
 
     const openNow = parsed.openNow === true;
     const label = category ? SERVICE_CATEGORIES[category].label : freeQuery;
+    // 特殊寵物的急症：多數夜間急診只看犬貓，提醒先打電話
+    const exoticWarning = category === 'exotic_vet' && openNow
+      ? '\n\n⚠️ 多數夜間急診只看狗貓，出發前請先打電話確認有看特殊寵物的醫師。'
+      : '';
     return NextResponse.json({
       action: 'search',
-      reply,
+      reply: reply + exoticWarning,
       keyword,
+      // 加了特徵詞卻找太少時，用這個基本詞重搜
+      fallbackKeyword: features.length ? buildQuery(category, [], freeQuery) : null,
+      features,
+      // 醫療相關時手機不要收起對話框，讓處置建議完整顯示
+      medical: category === 'vet' || category === 'emergency_vet' || category === 'exotic_vet',
       category,
       openNow,
       targetLocation,
       scope,
       // 讓家長知道系統實際搜尋了什麼
-      searchSummary: [label, ...features].join('・') + `｜${areaNote || targetArea || '你附近'}` + (openNow ? '｜營業中' : ''),
+      searchSummary: `${label}｜${areaNote || targetArea || '你附近'}` + (openNow ? '｜營業中（依 Google 營業時間）' : ''),
     });
   } catch (error: any) {
     console.error('[api/chat] 錯誤', error?.message);
