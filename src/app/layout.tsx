@@ -5,6 +5,8 @@ import Providers from '@/components/Providers';
 export const metadata: Metadata = {
   title: 'Pawink 寵物生態系平台',
   description: '全台一站式寵物生活生態系平台 (B2C & B2B)',
+  // iPhone 會自動把地址、電話變成底線連結，干擾店家卡片的版面
+  formatDetection: { telephone: false, address: false, email: false },
 };
 
 // 手機鍵盤打開時縮小版面，讓底部的對話輸入框留在鍵盤上方

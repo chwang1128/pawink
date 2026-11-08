@@ -841,10 +841,10 @@ export default function FullMapAIPortal() {
 
       {/* 2. 頂部 Header */}
       <header className="absolute top-3 left-3 right-3 md:top-5 md:left-5 md:right-5 z-20 flex justify-between items-start pointer-events-none">
-        <div className="flex flex-col md:flex-row md:items-center space-y-3 md:space-y-0 md:space-x-4 w-full md:w-auto">
+        <div className="flex flex-col md:flex-row md:items-center space-y-3 md:space-y-0 md:space-x-4 shrink-0 md:w-auto">
           
-          <div className={`${glassmorphism} px-4 py-2 md:py-2.5 rounded-[22px] flex items-center space-x-3 pointer-events-auto self-start border border-[#E8DFD8]`}>
-            <div className="w-9 h-9 relative flex items-center justify-center shrink-0">
+          <div className={`${glassmorphism} px-3 md:px-4 py-2 md:py-2.5 rounded-[22px] flex items-center space-x-2 md:space-x-3 pointer-events-auto self-start border border-[#E8DFD8]`}>
+            <div className="w-7 h-7 md:w-9 md:h-9 relative flex items-center justify-center shrink-0">
               <svg viewBox="0 0 100 90" className="w-full h-full text-[#B88746]" fill="none" stroke="currentColor" strokeWidth="4.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M 32 18 C 18 18, 10 32, 10 50 C 10 66, 28 78, 50 86 C 72 78, 90 66, 90 50 C 90 32, 82 18, 68 18 C 56 18, 48 26, 50 36 L 50 36 C 52 26, 46 18, 32 18 Z" strokeWidth="4" />
                 <path d="M 22 28 C 16 36, 16 46, 24 50" strokeWidth="3.5" />
@@ -855,7 +855,7 @@ export default function FullMapAIPortal() {
               </svg>
             </div>
             
-            <span className="font-black text-[#38312D] tracking-tight text-xl leading-none">
+            <span className="font-black text-[#38312D] tracking-tight text-lg md:text-xl leading-none whitespace-nowrap">
               Pawink
             </span>
           </div>
@@ -875,24 +875,24 @@ export default function FullMapAIPortal() {
         </div>
 
         {/* 右側：寵物生命檔案卡按鈕 */}
-        <div className="flex items-center space-x-2 pointer-events-auto">
+        <div className="flex items-center space-x-1.5 md:space-x-2 pointer-events-auto min-w-0">
           <button 
             onClick={() => {
               setPetTempProfile(petProfile);
               setIsPetModalOpen(true);
             }}
-            className={`${glassmorphism} hover:bg-[#F7F2EA] transition-all px-3.5 py-1.5 md:px-4 md:py-2 rounded-full flex items-center space-x-2 border border-[#E8DFD8] shadow-sm cursor-pointer group`}
+            className={`${glassmorphism} hover:bg-[#F7F2EA] transition-all px-3 py-1.5 md:px-4 md:py-2 rounded-full flex items-center space-x-1.5 md:space-x-2 border border-[#E8DFD8] shadow-sm cursor-pointer group min-w-0 whitespace-nowrap`}
           >
             <span className="text-lg leading-none">{petProfile.type === 'dog' ? '🐶' : '🐱'}</span>
-            <div className="flex flex-col text-left">
-              <span className="font-black text-xs md:text-sm text-[#38312D] group-hover:text-[#B88746] leading-none mb-0.5">
+            <div className="flex flex-col text-left min-w-0 max-w-[96px] md:max-w-none">
+              <span className="font-black text-xs md:text-sm text-[#38312D] group-hover:text-[#B88746] leading-none mb-0.5 truncate">
                 {petProfile.name}
               </span>
-              <span className="text-[10px] text-[#A67C52] font-bold leading-none mt-0.5">
+              <span className="text-[10px] text-[#A67C52] font-bold leading-none mt-0.5 truncate">
                 {petProfile.breed}{hasMounted ? ` • ${calculateAge(petProfile.birthday)}` : ''}
               </span>
             </div>
-            <Edit3 className="w-3.5 h-3.5 text-[#B88746] ml-1 opacity-70 group-hover:opacity-100" />
+            <Edit3 className="hidden md:block w-3.5 h-3.5 text-[#B88746] ml-1 opacity-70 group-hover:opacity-100" />
           </button>
 
           {/* 帳號：已登入顯示頭像與登出；未登入且已設定登入方式時顯示登入 */}
@@ -903,7 +903,7 @@ export default function FullMapAIPortal() {
                 onClick={() => setIsAccountMenuOpen(o => !o)}
                 aria-haspopup="menu"
                 aria-expanded={isAccountMenuOpen}
-                className={`${glassmorphism} rounded-full flex items-center justify-center h-9 md:h-10 ${authStatus === 'authenticated' ? 'w-9 md:w-10 p-0.5' : 'px-3.5 text-xs md:text-sm font-black text-[#4A423D] hover:text-[#B88746]'}`}
+                className={`${glassmorphism} rounded-full flex items-center justify-center h-9 md:h-10 ${authStatus === 'authenticated' ? 'w-9 md:w-10 p-0.5' : 'px-3 md:px-3.5 text-xs md:text-sm font-black text-[#4A423D] hover:text-[#B88746] whitespace-nowrap'}`}
               >
                 {authStatus === 'authenticated'
                   ? (session?.user?.image
@@ -944,7 +944,7 @@ export default function FullMapAIPortal() {
             </div>
           )}
 
-          <div className={`${glassmorphism} px-3.5 py-2 md:px-4 md:py-2.5 rounded-full text-xs md:text-sm font-black text-[#B88746] flex items-center space-x-1.5 bg-[#FFFDF9]`}>
+          <div className={`${glassmorphism} hidden md:flex px-4 py-2.5 rounded-full text-sm font-black text-[#B88746] items-center space-x-1.5 bg-[#FFFDF9]`}>
             <Coins className="w-4 h-4 text-[#C59B63]" />
             <span className="hidden md:inline">{coins.toLocaleString()} P</span>
           </div>
@@ -961,7 +961,7 @@ export default function FullMapAIPortal() {
       </button>
 
       {showSearchHereBtn && (
-        <div className="absolute top-16 md:top-24 left-0 right-0 z-20 flex justify-center pointer-events-none animate-in fade-in slide-in-from-top-4">
+        <div className="absolute top-[76px] md:top-24 left-0 right-0 z-20 flex justify-center pointer-events-none animate-in fade-in slide-in-from-top-4">
           <button 
             onClick={() => searchGooglePlaces(lastKeyword, 'mapCenter', null, null, true)}
             className="bg-[#38312D]/90 backdrop-blur-xl shadow-[0_12px_24px_rgba(56,49,45,0.2)] rounded-full px-5 py-2.5 md:px-6 md:py-3 flex items-center space-x-2 text-white pointer-events-auto hover:bg-[#2A2320] transition-all active:scale-95"
