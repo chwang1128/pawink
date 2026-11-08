@@ -151,9 +151,13 @@ export async function POST(req: Request) {
 
     // 沒有說地區、也拿不到家長位置：不要默默用預設的台北搜尋。先給建議，再問在哪裡
     if (!targetArea && !userLoc) {
+      // 模型的回覆常寫「這就幫你找」，但這裡還沒辦法找：把這類句子拿掉，只留處置建議
+      const advice = urgent
+        ? reply.split(/(?<=[，,。！？!?])/).filter((x: string) => !/(尋找|搜尋|找找|查詢|這就|馬上找)/.test(x)).join('').trim().replace(/[，,]$/, '。')
+        : '';
       return NextResponse.json({
         action: 'chat',
-        reply: `${urgent ? reply + '\n\n' : ''}我還不知道你在哪裡。告訴我縣市和區域或附近地標（例如「板橋車站」），${urgent ? '我馬上找最近的醫院' : '我就幫你找'}；也可以在瀏覽器允許定位。`,
+        reply: `${advice ? advice + '\n\n' : ''}我還不知道你在哪裡。告訴我縣市和區域或附近地標（例如「板橋車站」），${urgent ? '我馬上找最近的醫院' : '我就幫你找'}；也可以在瀏覽器允許定位。`,
       });
     }
 
