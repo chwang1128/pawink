@@ -8,7 +8,7 @@ export default function MerchantJoinWeb() {
     <div className="min-h-screen bg-slate-50 font-sans">
       <header className="max-w-7xl mx-auto px-8 h-20 flex items-center justify-between">
         <div className="flex items-center gap-2 font-bold text-2xl text-blue-600">
-          🐾 PetHub
+          🐾 Pawink
         </div>
         <div className="flex items-center gap-4">
           <Link href="/merchant/dashboard" className="px-4 py-2 text-slate-600 font-medium hover:text-blue-600">店家登入</Link>
@@ -20,8 +20,8 @@ export default function MerchantJoinWeb() {
         {/* 左側：三步驟說明 (對應附圖 3) */}
         <div className="col-span-5 flex flex-col gap-8">
           <div>
-            <span className="px-3 py-1 bg-blue-50 text-blue-600 text-xs font-bold rounded-full border border-blue-100">加入 PetHub，讓更多毛孩家長找到你</span>
-            <h1 className="text-4xl font-extrabold text-slate-900 mt-4 leading-tight">店家免費加入 PetHub</h1>
+            <span className="px-3 py-1 bg-blue-50 text-blue-600 text-xs font-bold rounded-full border border-blue-100">加入 Pawink，讓更多毛孩家長找到你</span>
+            <h1 className="text-4xl font-extrabold text-slate-900 mt-4 leading-tight">店家免費加入 Pawink</h1>
             <p className="text-slate-500 text-sm mt-2">只要三個步驟，立即建立專屬店家頁，開始接收預約！</p>
           </div>
 

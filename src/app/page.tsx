@@ -125,7 +125,7 @@ const GoogleMapsAttribution = () => (
 );
 
 // 未登入時，寵物檔案暫存在這台裝置的瀏覽器；登入後會搬進帳號
-const GUEST_PET_KEY = 'pethub.guestPet.v1';
+const GUEST_PET_KEY = 'pawink.guestPet.v1';
 const readGuestPet = (): PetProfile | null => {
   try {
     const raw = window.localStorage.getItem(GUEST_PET_KEY);
@@ -252,7 +252,7 @@ export default function FullMapAIPortal() {
   };
 
   const [messages, setMessages] = useState<Array<{ sender: 'ai' | 'user'; text: string }>>([
-    { sender: 'ai', text: `您好！我是 PetHub AI 助理 🐾 已為您載入【${petProfile.name}】的專屬檔案。請告訴我您的需求，我將啟動 Google Gemini 大語言模型為您服務！` }
+    { sender: 'ai', text: `您好！我是 Pawink AI 助理 🐾 已為您載入【${petProfile.name}】的專屬檔案。請告訴我您的需求，我將啟動 Google Gemini 大語言模型為您服務！` }
   ]);
   
   const [inputQuery, setInputQuery] = useState('');
@@ -801,7 +801,7 @@ export default function FullMapAIPortal() {
             </div>
             
             <span className="font-black text-[#38312D] tracking-tight text-xl leading-none">
-              PetHub
+              Pawink
             </span>
           </div>
 
