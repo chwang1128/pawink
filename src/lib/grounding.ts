@@ -111,3 +111,15 @@ export function districtOf(address: string | null | undefined): string | null {
   const m = address.replace(/臺/g, '台').match(/([\u4e00-\u9fa5]{2}[市縣])([\u4e00-\u9fa5]{1,3}?[區鄉鎮市])/);
   return m ? m[1] + m[2] : null;
 }
+
+// 家長沒講地點＝就在目前位置：取離他最近幾家店的地址裡最常出現的「縣市＋區」（在區界附近也比較穩）
+export function districtNear(addresses: (string | null | undefined)[]): string | null {
+  const count = new Map<string, number>();
+  for (const a of addresses.slice(0, 5)) {
+    const d = districtOf(a);
+    if (d) count.set(d, (count.get(d) || 0) + 1);
+  }
+  let best: string | null = null, n = 0;
+  for (const [d, c] of Array.from(count.entries())) if (c > n) { best = d; n = c; }
+  return best;
+}
