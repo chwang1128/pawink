@@ -216,6 +216,10 @@ export async function POST(req: Request) {
       openNow,
       targetLocation,
       scope,
+      // AI 查證（Grounding）：緊急情況不用（Google 條款禁止用於緊急應變等高風險用途）
+      grounding: urgent
+        ? null
+        : { need: label, features, area: areaNote || targetArea || null },
       // 讓家長知道系統實際搜尋了什麼
       searchSummary: `${label}｜${areaNote || targetArea || '你附近'}` + (openNow ? '｜營業中（依 Google 營業時間）' : ''),
     });
