@@ -11,20 +11,19 @@ export function clientKey(req: Request): string {
   return createHash('sha256').update(`${salt}:${ip}`).digest('hex').slice(0, 24);
 }
 
-// 先檢查再加一；超過任一上限就回 false
+// 一次查詢完成「加一並取回目前次數」（減少資料庫往返）；超過任一上限就回 false
 export async function takeDailyQuota(feature: string, client: string, perClient: number, total: number): Promise<boolean> {
   const day = dayTW();
   const allKey = `${feature}:${day}:all`;
   const clientKeyName = `${feature}:${day}:ip:${client}`;
   try {
-    const rows = await prisma.usageCounter.findMany({ where: { key: { in: [allKey, clientKeyName] } } });
-    const used = (k: string) => rows.find(r => r.key === k)?.count ?? 0;
-    if (used(allKey) >= total || used(clientKeyName) >= perClient) return false;
-    await prisma.$transaction([
-      prisma.usageCounter.upsert({ where: { key: allKey }, create: { key: allKey, count: 1 }, update: { count: { increment: 1 } } }),
-      prisma.usageCounter.upsert({ where: { key: clientKeyName }, create: { key: clientKeyName, count: 1 }, update: { count: { increment: 1 } } }),
-    ]);
-    return true;
+    const rows = await prisma.$queryRaw<{ key: string; count: number }[]>`
+      INSERT INTO "UsageCounter" ("key", "count", "updatedAt")
+      VALUES (${allKey}, 1, now()), (${clientKeyName}, 1, now())
+      ON CONFLICT ("key") DO UPDATE SET "count" = "UsageCounter"."count" + 1, "updatedAt" = now()
+      RETURNING "key", "count"`;
+    const used = (k: string) => Number(rows.find(r => r.key === k)?.count ?? Infinity);
+    return used(allKey) <= total && used(clientKeyName) <= perClient;
   } catch (e: any) {
     console.error('[usage-limit] 無法檢查用量，暫停此功能', e?.message);
     return false;
