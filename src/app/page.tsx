@@ -1212,7 +1212,7 @@ export default function FullMapAIPortal() {
         <div className={`absolute z-[60] bg-[#FFFDF9]/95 backdrop-blur-3xl shadow-[0_-10px_40px_rgba(56,49,45,0.15)] flex flex-col pointer-events-auto transition-all duration-400 ease-out
                         md:top-0 md:bottom-0 md:left-0 md:w-[440px] md:h-full md:rounded-none md:ring-1 md:ring-[#E8DFD8]
                         top-auto bottom-0 left-0 w-full rounded-t-[32px] overflow-hidden
-                        ${isSheetExpanded ? 'h-[85vh]' : 'h-[280px]'}`}>
+                        ${isSheetExpanded ? 'h-[85vh] h-[85dvh]' : 'h-[344px] max-h-[60dvh]'} md:h-full md:max-h-none`}>
           
           <div 
             onClick={() => setIsSheetExpanded(!isSheetExpanded)}
@@ -1226,7 +1226,7 @@ export default function FullMapAIPortal() {
           </div>
 
           <div className="flex-1 flex flex-col min-h-0">
-            <div className="relative h-[140px] md:h-64 w-full shrink-0">
+            <div className={`relative ${isSheetExpanded ? 'h-[140px]' : 'h-[104px]'} md:h-64 w-full shrink-0 transition-[height] duration-300`}>
               <img src={selectedDetailStore.photoUrl} alt={selectedDetailStore.name} className="w-full h-full object-cover" />
               <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent"></div>
               {selectedDetailStore.photoAttributions.length > 0 && (
@@ -1269,7 +1269,7 @@ export default function FullMapAIPortal() {
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto hide-scrollbar pb-6 pt-1">
+            <div className="flex-1 min-h-0 overflow-y-auto hide-scrollbar pb-6 pt-1" onClick={() => { if (!isSheetExpanded && window.innerWidth < 768) setIsSheetExpanded(true); }}>
               <div className="px-5 py-3 flex flex-col space-y-2 border-b border-[#E8DFD8]">
                 <div className="flex items-start text-xs md:text-sm text-[#4A423D] font-medium">
                   <MapPin className="w-4 h-4 mr-2.5 text-[#B88746] mt-0.5 shrink-0" />
