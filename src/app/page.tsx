@@ -9,6 +9,8 @@ import {
   , LogIn, LogOut
 } from 'lucide-react';
 import { SERVICE_CATEGORIES, type ServiceCategoryKey } from '@/lib/service-categories';
+import type { GroundingResult } from '@/lib/grounding';
+import GroundedAnswer, { GroundingLoading } from '@/components/GroundedAnswer';
 
 interface PetProfile {
   name: string;
@@ -58,6 +60,8 @@ interface Store {
   detailsToken: string;
   distanceKm?: number;
   distanceText?: string;
+  // AI 查證（Google 地圖 Grounding）的回覆有引用這家店
+  aiMentioned?: boolean;
   // 點開店家時才向 Google 取得
   details?: StoreDetails;
 }
@@ -261,7 +265,9 @@ export default function FullMapAIPortal() {
     }
   };
 
-  const [messages, setMessages] = useState<Array<{ sender: 'ai' | 'user'; text: string }>>([
+  // grounding：AI 查證結果（Google 地圖／網路）。這類訊息只顯示，不送回給我們的 AI 當對話紀錄，
+  // 避免把 Google 地圖內容拿去產生新內容（Google Maps Platform 條款 3.2.3(c)）
+  const [messages, setMessages] = useState<Array<{ sender: 'ai' | 'user'; text: string; grounding?: GroundingResult | 'loading'; gid?: number }>>([
     { sender: 'ai', text: `嗨！我是 Pawink 毛孩助理 🐾 想幫【${petProfile.name}】找什麼？可以直接說，例如「附近的動物醫院」「下週出國要寄宿」，也可以問照顧上的問題。` }
   ]);
   
@@ -365,6 +371,16 @@ export default function FullMapAIPortal() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isLoading, isAiTyping]);
+
+  // 手機版對話框收起時捲動無效：重新打開時直接跳到最新訊息（例如點「看完整對話」）
+  useEffect(() => {
+    if (isAiBoxMinimized) return;
+    const t = setTimeout(() => {
+      const list = messagesEndRef.current?.parentElement;
+      if (list) list.scrollTop = list.scrollHeight;
+    }, 80);
+    return () => clearTimeout(t);
+  }, [isAiBoxMinimized]);
 
   useEffect(() => {
     const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '';
@@ -709,7 +725,7 @@ export default function FullMapAIPortal() {
           prompt: text,
           petProfile: petProfile,
           userLocation: userLocation || null,
-          history: newHistory.slice(1).map(m => ({ 
+          history: newHistory.slice(1).filter(m => !m.grounding).map(m => ({ 
             role: m.sender === 'ai' ? 'model' : 'user', 
             content: m.text 
           })),
@@ -767,6 +783,16 @@ export default function FullMapAIPortal() {
         const openNote = chatData.openNow === true ? '\n營業狀態來自 Google，實際以店家公告為準，出發前請先打電話。' : '';
         const doneMsg = `🔎 搜尋：${chatData.searchSummary || finalKeyword}${wantNote}${openNote}\n找到 ${latestStores.length} 家，已標在地圖上。點開卡片可看 Google 上的營業時間、電話與評論。`;
         setMessages(prev => [...prev, { sender: 'ai', text: doneMsg }]);
+
+        // AI 查證：店家已標上地圖後，再請 Google 地圖與網路資料補充（約 2 秒，失敗就略過）
+        const gLat = targetLat ?? userLocation?.lat ?? null;
+        const gLng = targetLng ?? userLocation?.lng ?? null;
+        if (chatData.grounding && gLat !== null && gLng !== null) {
+          // 沒講地點時 area 為 null：伺服器以目前位置查出所在的「縣市＋區」
+          const area = chatData.grounding.area;
+          const radiusKm = Math.max(5, Math.min(SCOPE_RADIUS_KM[(chatData.scope || 'near') as SearchScope] * 2, 15));
+          void runGrounding(text, { ...chatData.grounding, area, radiusKm }, gLat, gLng);
+        }
       }
     } catch (err) {
       const errorMsg = '請求發生錯誤，後端可能尚未準備好。';
@@ -774,6 +800,34 @@ export default function FullMapAIPortal() {
       speakText(errorMsg);
     } finally {
       setIsAiTyping(false);
+    }
+  };
+
+  const groundingSeq = useRef(0);
+  const runGrounding = async (question: string, g: { need: string; features: string[]; area: string | null; radiusKm: number }, lat: number, lng: number) => {
+    const gid = ++groundingSeq.current;
+    setMessages(prev => [...prev, { sender: 'ai', text: '', grounding: 'loading', gid }]);
+    let result: GroundingResult | null = null;
+    try {
+      const res = await fetch('/api/grounding', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question, need: g.need, features: g.features, area: g.area, radiusKm: g.radiusKm, lat, lng }),
+      });
+      if (res.ok) result = await res.json();
+    } catch {}
+    const ok = !!result && (!!result.maps || !!result.search);
+    setMessages(prev => ok
+      ? prev.map(m => (m.gid === gid ? { ...m, grounding: result as GroundingResult } : m))
+      : prev.filter(m => m.gid !== gid));
+    // 手機版搜尋後對話框會收起：用 AI 按鈕旁的提醒泡泡告訴家長查證好了
+    if (ok && window.innerWidth < 768) setAiPeek('🔍 AI 查證好了：Google 地圖評論與網路上的飼主分享，點這裡看');
+    // 地圖上：AI 查證有引用到的店加小標記（不刪店、不重排）
+    const cited = new Set(result?.maps?.citedPlaceIds || []);
+    if (cited.size) {
+      const mark = (s: Store) => (cited.has(s.id) ? { ...s, aiMentioned: true } : s);
+      setStores(prev => prev.map(mark));
+      setDisplayedStores(prev => prev.map(mark));
     }
   };
 
@@ -1063,7 +1117,7 @@ export default function FullMapAIPortal() {
                       ? 'bg-[#B88746] text-white rounded-tr-sm' 
                       : 'bg-white ring-1 ring-[#E8DFD8] text-[#38312D] rounded-tl-sm whitespace-pre-line font-medium'
                   }`}>
-                    {m.text}
+                    {m.grounding === 'loading' ? <GroundingLoading /> : m.grounding ? <GroundedAnswer result={m.grounding} /> : m.text}
                   </div>
                 </div>
               ))}
@@ -1211,6 +1265,11 @@ export default function FullMapAIPortal() {
               
               <div className="p-3 md:p-4 flex flex-col flex-1 relative justify-center overflow-hidden">
                 <h3 className="font-black text-[#38312D] text-sm md:text-base leading-tight line-clamp-1 pr-6 mb-1">{store.name}</h3>
+                {store.aiMentioned && (
+                  <span className="text-[10px] font-bold text-[#4D8B6F] bg-[#EAF3EE] rounded-md px-1.5 py-0.5 w-max" title="AI 依 Google 地圖資訊整理時提到這家；未提到不代表不符合">
+                    🔍 AI 查證有提到
+                  </span>
+                )}
                 
                 <p className="text-xs text-[#A67C52] flex items-center line-clamp-1 mt-1 font-medium">
                   <MapPin className="w-3 h-3 mr-1 text-[#B88746] shrink-0" />

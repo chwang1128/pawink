@@ -145,3 +145,10 @@ model Appointment {
   totalPrice    Float
   createdAt     DateTime       @default(now())
 }
+
+// 用量計數（例如 AI 查證每日上限）。key 例：grounding:2026-11-08:all、grounding:2026-11-08:ip:<雜湊>
+model UsageCounter {
+  key       String   @id
+  count     Int      @default(0)
+  updatedAt DateTime @updatedAt
+}
