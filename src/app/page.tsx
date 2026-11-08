@@ -156,6 +156,8 @@ export default function FullMapAIPortal() {
   const [coins, setCoins] = useState(2000);
   // 預設收起，避免手機先閃出對話框；桌面版掛載後再展開
   const [isAiBoxMinimized, setIsAiBoxMinimized] = useState(true);
+  // 手機搜尋後對話框會收起讓出地圖；把 AI 這次的提醒留在按鈕旁，避免看不到（例如誤食時的處置）
+  const [aiPeek, setAiPeek] = useState<string | null>(null);
   const [hasOpenedAi, setHasOpenedAi] = useState(false);
   const [locationStatus, setLocationStatus] = useState<'idle' | 'loading' | 'success' | 'denied' | 'error'>('idle');
 
@@ -717,6 +719,7 @@ export default function FullMapAIPortal() {
         speakText(chatData.reply); 
       } else if (chatData.action === 'search') {
         setMessages(prev => [...prev, { sender: 'ai', text: chatData.reply }]);
+        if (window.innerWidth < 768) setAiPeek(chatData.reply || null);
         speakText(chatData.reply); 
         
         const finalKeyword = chatData.keyword || text;
@@ -1113,11 +1116,22 @@ export default function FullMapAIPortal() {
 
       {/* 喚醒懸浮鈕 */}
       {isAiBoxMinimized && (
-        <div className={`absolute z-30 flex flex-col items-end pointer-events-auto transition-all duration-400 ease-out right-4 md:right-6 animate-bounce ${
+        <div className={`absolute z-30 flex flex-col items-end pointer-events-auto transition-all duration-400 ease-out right-4 md:right-6 ${!hasOpenedAi && !aiPeek ? 'animate-bounce' : ''} ${
           (displayedStores.length > 0 || featuredStores.length > 0) && !selectedDetailStore ? 'bottom-[176px] md:bottom-8' : 'bottom-9 md:bottom-8'
         }`}>
           
-          {!hasOpenedAi && (
+          {aiPeek && (
+            <div className="mb-2 w-[min(280px,calc(100vw-32px))] bg-[#FFFDF9] rounded-2xl shadow-xl ring-1 ring-[#E8DFD8] p-3 pr-8 relative animate-in fade-in">
+              <button type="button" onClick={() => { setIsAiBoxMinimized(false); setHasOpenedAi(true); setAiPeek(null); }} className="text-left text-xs leading-relaxed text-[#38312D] line-clamp-4">
+                {aiPeek}
+                <span className="block mt-1 font-bold text-[#B88746]">看完整對話 ›</span>
+              </button>
+              <button type="button" onClick={() => setAiPeek(null)} aria-label="關閉提醒" className="absolute top-2 right-2 p-1 text-[#A67C52]">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+          {!hasOpenedAi && !aiPeek && (
             <div className="mb-2 mr-2 flex flex-col items-center pointer-events-none">
               <div className="bg-[#E07A5F] text-white text-[13px] font-black px-4 py-2 rounded-2xl shadow-xl flex items-center space-x-1">
                 <span>👋 點這裡與 AI 對話！</span>
@@ -1130,7 +1144,7 @@ export default function FullMapAIPortal() {
             <div className="absolute w-[120%] h-[120%] rounded-full bg-[#B88746]/30 animate-ping"></div>
             
             <button 
-              onClick={() => { setIsAiBoxMinimized(false); setHasOpenedAi(true); }} 
+              onClick={() => { setIsAiBoxMinimized(false); setHasOpenedAi(true); setAiPeek(null); }} 
               className="relative bg-[#FFFDF9] backdrop-blur-xl shadow-[0_12px_30px_rgba(184,135,70,0.4)] rounded-full p-3 md:pl-5 md:pr-6 md:py-4 flex items-center space-x-3 active:scale-95 transition-all ring-2 ring-[#B88746]/50"
             >
               <div className="w-12 h-12 md:w-12 md:h-12 rounded-full bg-gradient-to-tr from-[#A67C52] to-[#D4AF37] text-white flex items-center justify-center shadow-inner">
