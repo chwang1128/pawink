@@ -764,7 +764,8 @@ export default function FullMapAIPortal() {
           : lastSearchRelaxedRef.current
             ? `\n找不到標明「${wants.join('、')}」的店，先列出這一帶全部的店，請打電話問是否符合。`
             : `\n條件：${wants.join('、')}（店家是否符合，請點開看評論或打電話確認）`;
-        const doneMsg = `🔎 搜尋：${chatData.searchSummary || finalKeyword}${wantNote}\n找到 ${latestStores.length} 家，已標在地圖上。點開卡片可看 Google 上的營業時間、電話與評論。`;
+        const openNote = chatData.openNow === true ? '\n營業狀態來自 Google，實際以店家公告為準，出發前請先打電話。' : '';
+        const doneMsg = `🔎 搜尋：${chatData.searchSummary || finalKeyword}${wantNote}${openNote}\n找到 ${latestStores.length} 家，已標在地圖上。點開卡片可看 Google 上的營業時間、電話與評論。`;
         setMessages(prev => [...prev, { sender: 'ai', text: doneMsg }]);
       }
     } catch (err) {
@@ -1366,7 +1367,7 @@ export default function FullMapAIPortal() {
                     <div className="flex items-start text-xs md:text-sm text-[#4A423D] font-medium">
                       <Clock className="w-4 h-4 mr-2.5 text-[#4D8B6F] mt-0.5 shrink-0" />
                       <span>
-                        {selectedDetailStore.details.openNow === true && <span className="text-[#4D8B6F] font-bold mr-1.5">營業中</span>}
+                        {selectedDetailStore.details.openNow === true && <span className="text-[#4D8B6F] font-bold mr-1.5" title="依 Google 營業時間，實際以店家公告為準">營業中<span className="font-normal text-[10px] text-gray-400 ml-0.5">(Google)</span></span>}
                         {selectedDetailStore.details.openNow === false && <span className="text-rose-600 font-bold mr-1.5">休息中</span>}
                         {todayHours(selectedDetailStore.details.weekdayHours) || '未提供營業時間'}
                       </span>
