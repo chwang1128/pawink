@@ -70,7 +70,7 @@ export default function PetCompanion({
   walkHome: { lat: number; lng: number } | null; // 散步的中心（使用者位置；沒有就用地圖中心）
 }) {
   const desktop = useIsDesktop();
-  const W = desktop ? 300 : 230; // 舞台寬
+  const W = desktop ? 300 : 180; // 舞台寬（手機左邊另有直排的玩具與狀態）
   const H = desktop ? 150 : 118; // 舞台高
   const PET_H = desktop ? 112 : 88;
   // 放在地圖左下角，避開店家卡片列與推薦面板
@@ -472,7 +472,30 @@ export default function PetCompanion({
     </div>
   );
 
-  return (
+  // 托盤按鈕（桌機橫排、手機直排）
+  const trayButtons = (
+    <>
+      {tray.map(it => (
+        <button
+          key={it.key}
+          type="button"
+          onPointerDown={e => startDrag(e, it)}
+          onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); doDrop(it, xRef.current + PET_H * 0.9); } }}
+          aria-label={`${it.label}${it.disabled ? `（${it.disabled}）` : ''}`}
+          className={`shrink-0 flex flex-col items-center rounded-xl px-1 pt-0.5 pb-0.5 touch-none cursor-grab active:cursor-grabbing hover:bg-[#F7F2EA] ${it.disabled ? 'opacity-40' : ''}`}
+          style={{ width: desktop ? 46 : 42 }}
+        >
+          <img src={it.img} alt="" draggable={false} className={`${desktop ? 'w-8 h-8' : 'w-7 h-7'} object-contain pointer-events-none`} />
+          <span className="text-[9px] font-bold text-[#6E5A4D] leading-tight whitespace-nowrap">{it.label}</span>
+        </button>
+      ))}
+      <a href="/pet" className="shrink-0 flex flex-col items-center justify-center rounded-xl px-1 hover:bg-[#F7F2EA]" style={{ width: desktop ? 46 : 42 }}>
+        <span className={`${desktop ? 'text-xl leading-8' : 'text-lg leading-7'}`} aria-hidden="true">🛍️</span>
+        <span className="text-[9px] font-bold text-[#B88746] leading-tight">商店</span>
+      </a>
+    </>
+  );
+  if (desktop) return (
     <div className={`absolute ${cramped ? 'z-[75]' : 'z-[15]'} pointer-events-none select-none`} style={{ bottom, left: cramped ? Math.max(8, Math.min(left, vw - W - 8)) : left, width: W }}>
       {/* 舞台 */}
       <div ref={stageRef} className="relative" style={{ height: H }}>
@@ -546,24 +569,7 @@ export default function PetCompanion({
 
       {/* 托盤：拖到牠旁邊，或點一下 */}
       <div className="pointer-events-auto mt-1 flex gap-1.5 overflow-x-auto hide-scrollbar px-1.5 py-1.5 rounded-2xl bg-[#FFFDF9]/90 backdrop-blur ring-1 ring-[#E8DFD8] shadow-sm" role="toolbar" aria-label="拖到毛孩旁邊，或點一下">
-        {tray.map(it => (
-          <button
-            key={it.key}
-            type="button"
-            onPointerDown={e => startDrag(e, it)}
-            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); doDrop(it, xRef.current + PET_H * 0.9); } }}
-            aria-label={`${it.label}${it.disabled ? `（${it.disabled}）` : ''}`}
-            className={`shrink-0 flex flex-col items-center rounded-xl px-1 pt-0.5 pb-0.5 touch-none cursor-grab active:cursor-grabbing hover:bg-[#F7F2EA] ${it.disabled ? 'opacity-40' : ''}`}
-            style={{ width: desktop ? 46 : 42 }}
-          >
-            <img src={it.img} alt="" draggable={false} className="w-8 h-8 object-contain pointer-events-none" />
-            <span className="text-[9px] font-bold text-[#6E5A4D] leading-tight whitespace-nowrap">{it.label}</span>
-          </button>
-        ))}
-        <a href="/pet" className="shrink-0 flex flex-col items-center justify-center rounded-xl px-1 hover:bg-[#F7F2EA]" style={{ width: desktop ? 46 : 42 }}>
-          <span className="text-xl leading-8" aria-hidden="true">🛍️</span>
-          <span className="text-[9px] font-bold text-[#B88746] leading-tight">商店</span>
-        </a>
+        {trayButtons}
       </div>
 
       {/* 名牌與狀態：放在最下面，不擋地圖 */}
@@ -578,6 +584,110 @@ export default function PetCompanion({
         <button type="button" onClick={onLogin} className="pointer-events-auto mt-1 text-[10px] font-bold text-[#B88746] underline px-2">登入後照顧紀錄會保存，還能賺點數</button>
       )}
 
+      {/* 拖曳中的東西 */}
+      {drag && drag.moved && (
+        <img src={drag.item.img} alt="" className="fixed z-[200] w-12 h-12 object-contain pointer-events-none -translate-x-1/2 -translate-y-1/2 drop-shadow-lg" style={{ left: drag.x, top: drag.y }} />
+      )}
+    </div>
+  );
+
+  // 手機：玩具和狀態放在畫面左邊直排，毛孩站在右邊
+  const vbar = (v: number, c: string, label: string) => (
+    <div className="flex flex-col items-center gap-0.5" title={`${label} ${v}`}>
+      <div className="w-1.5 h-8 rounded-full bg-[#E8DFD8] overflow-hidden flex flex-col justify-end"><div className="w-full rounded-full" style={{ height: `${v}%`, background: v < 30 ? '#C0705A' : c }} /></div>
+      <span className="text-[8px] font-bold text-[#6E5A4D] leading-none">{label}</span>
+    </div>
+  );
+  return (
+    <div className="absolute z-[15] pointer-events-none select-none flex items-end gap-1.5" style={{ bottom, left }}>
+      <div className="pointer-events-auto flex flex-col items-center gap-1 px-1 py-1.5 rounded-2xl bg-[#FFFDF9]/90 backdrop-blur ring-1 ring-[#E8DFD8] shadow-sm">
+        <button type="button" onClick={() => toggleMin(true)} aria-label="縮小毛孩" className="text-[#A67C52] text-xs leading-none py-0.5">—</button>
+        <div className="flex flex-col gap-1 overflow-y-auto hide-scrollbar max-h-[34vh]" role="toolbar" aria-orientation="vertical" aria-label="拖到毛孩旁邊，或點一下">
+          {trayButtons}
+        </div>
+        <div className="flex gap-1 pt-1 border-t border-[#E8DFD8]" aria-label={`${name} 的狀態`}>
+          {vbar(Math.round(stats.fullness), '#B88746', '飽')}
+          {vbar(Math.round(stats.cleanliness), '#6FA8C9', '潔')}
+          {vbar(Math.round(stats.mood), '#4D8B6F', '心')}
+        </div>
+      </div>
+      <div style={{ width: W }}>
+        {/* 舞台 */}
+        <div ref={stageRef} className="relative" style={{ height: H }}>
+          <div className="absolute left-2 right-2 bottom-0 h-8 rounded-[50%] bg-[radial-gradient(ellipse_at_center,rgba(255,244,229,.95),rgba(255,244,229,.55)_60%,transparent_72%)]" aria-hidden="true" />
+          {drops.map(d => (
+            <img
+              key={d.id}
+              src={d.done && d.item.key === 'bowl' ? PROP.bowl_empty : d.item.img}
+              alt=""
+              draggable={false}
+              className={`absolute pointer-events-none transition-opacity duration-500 ${d.done && d.item.key !== 'bowl' ? 'opacity-0' : ''} ${d.item.kind === 'toy' ? 'animate-[petball_.7s_ease-in-out_infinite]' : 'animate-[petdrop_.35s_ease-out]'}`}
+              style={d.item.kind === 'bath'
+                ? { left: d.x - PET_H * 0.45, bottom: PET_H * 0.25, width: PET_H * 0.9, opacity: 0.85 }
+                : { left: d.x - PET_H * 0.22, bottom: 6, width: PET_H * 0.44 }}
+            />
+          ))}
+
+          {out !== 'home' ? (
+            <div className="absolute inset-x-0 bottom-3 flex flex-col items-center gap-2 pointer-events-auto">
+              <p className="text-[12px] font-bold text-[#6E5A4D] bg-[#FFFDF9]/90 rounded-full px-3 py-1 shadow-sm">{out === 'returning' ? `${name} 跑回來了…` : `${name} 出門散步了`}</p>
+              <div className="flex gap-2">
+                <button type="button" disabled={out !== 'out'} onClick={callBack} className="px-3 py-2 rounded-xl text-xs font-black text-white bg-[#B88746] shadow active:scale-95 disabled:opacity-50">📣 叫牠回來</button>
+                <button type="button" disabled={out !== 'out'} onClick={() => walker.current?.panTo()} className="px-3 py-2 rounded-xl text-xs font-black text-[#38312D] bg-white ring-1 ring-[#E8DFD8] shadow active:scale-95 disabled:opacity-50">📍 看牠在哪</button>
+              </div>
+            </div>
+          ) : (
+            <button
+              ref={petBtn}
+              type="button"
+              onClick={onPetClick}
+              aria-label={asleep ? `${name} 睡著了，點一下叫醒牠` : `${name}：點頭摸摸，點身體逗牠`}
+              className="absolute bottom-1 pointer-events-auto cursor-pointer focus:outline-none"
+              style={{ left: x - PET_H * 0.6, width: PET_H * 1.2, height: PET_H }}
+            >
+              <div key={`${hop}-${pose}`} className={`w-full h-full ${['petted', 'belly', 'shake', 'stretch'].includes(pose) ? 'animate-[petsquash_.45s_ease-out]' : 'animate-[pethop_.5s_ease-out]'}`} style={{ transformOrigin: '50% 100%' }}>
+                <div className={`relative w-full h-full ${effPose === 'walk' || effPose === 'run' ? 'animate-[petwalk_.32s_ease-in-out_infinite]' : effPose === 'idle' || effPose === 'sit' || effPose === 'sleep' ? 'animate-[petidle_3s_ease-in-out_infinite]' : effPose === 'shake' ? 'animate-[petshake_.18s_linear_infinite]' : ''}`}>
+                  <img
+                    src={SPRITE[effPose]}
+                    alt=""
+                    draggable={false}
+                    className="w-full h-full object-contain object-bottom drop-shadow-[0_6px_6px_rgba(56,49,45,.18)]"
+                    style={{ transform: flip ? 'scaleX(-1)' : undefined, filter: lonely && (effPose === 'idle' || effPose === 'sit') ? 'saturate(.75)' : undefined }}
+                  />
+                  {dirty && effPose !== 'sleep' && (
+                    <>
+                      <span className="absolute left-[34%] top-[58%] w-4 h-3 rounded-full bg-[#7A5A3A]/45 blur-[1px]" aria-hidden="true" />
+                      <span className="absolute left-[55%] top-[70%] w-3 h-2.5 rounded-full bg-[#7A5A3A]/40 blur-[1px]" aria-hidden="true" />
+                      <span className="absolute left-[44%] top-[40%] w-2.5 h-2 rounded-full bg-[#7A5A3A]/35 blur-[1px]" aria-hidden="true" />
+                    </>
+                  )}
+                  {pet?.sparkle && <span className="absolute -top-1 right-2 text-base animate-pulse" aria-hidden="true">✨</span>}
+                  {asleep && [0, 1, 2].map(i => (
+                    <span key={i} className="absolute font-black text-[#8C7A6B] animate-[petzzz_2.4s_ease-out_infinite]" style={{ right: `${22 - i * 6}%`, top: '14%', fontSize: 11 + i * 3, animationDelay: `${i * 0.8}s` }} aria-hidden="true">Z</span>
+                  ))}
+                </div>
+              </div>
+            </button>
+          )}
+          {out === 'home' && !asleep && !busyRef.current && (
+            <button type="button" onClick={goWalk} className="absolute right-1 top-1 pointer-events-auto px-2 py-1 rounded-full text-[10px] font-black text-[#4D8B6F] bg-[#FFFDF9]/90 ring-1 ring-[#CFE3D7] shadow-sm active:scale-95">🦮 帶去散步</button>
+          )}
+          {particles.map(p => (
+            <span key={p.id} className={`absolute pointer-events-none -translate-x-1/2 animate-[petfloat_1.3s_ease-out_forwards] ${p.cls || ''}`} style={{ left: p.x, top: p.y }} aria-hidden="true">{p.text}</span>
+          ))}
+        </div>
+
+        {/* 給飼主的提示（不是牠在講話） */}
+        {notice && (
+          <div role="status" aria-live="polite" className="pointer-events-none mt-1 mx-1 px-2.5 py-1 rounded-xl bg-[#38312D]/85 text-white text-[11px] font-bold animate-[petdrop_.25s_ease-out]">{notice}</div>
+        )}
+
+        {!loggedIn && (
+          <button type="button" onClick={onLogin} className="pointer-events-auto mt-1 text-[10px] font-bold text-[#B88746] underline px-2">登入後照顧紀錄會保存，還能賺點數</button>
+        )}
+
+
+      </div>
       {/* 拖曳中的東西 */}
       {drag && drag.moved && (
         <img src={drag.item.img} alt="" className="fixed z-[200] w-12 h-12 object-contain pointer-events-none -translate-x-1/2 -translate-y-1/2 drop-shadow-lg" style={{ left: drag.x, top: drag.y }} />
