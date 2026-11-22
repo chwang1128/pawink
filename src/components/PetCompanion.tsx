@@ -71,8 +71,8 @@ export default function PetCompanion({
 }) {
   const desktop = useIsDesktop();
   const W = desktop ? 420 : 180; // 舞台寬：桌機加寬讓牠走得開（舞台透明，只有牠本身可以點）
-  const H = desktop ? 150 : 118; // 舞台高
-  const PET_H = desktop ? 112 : 88;
+  const H = desktop ? 128 : 104; // 舞台高
+  const PET_H = desktop ? 94 : 76; // 毛孩高度（原 112 / 88，縮小一點）
   // 放在地圖左下角，避開店家卡片列與推薦面板
   const [vw, setVw] = useState(1280);
   useEffect(() => { const on = () => setVw(window.innerWidth); on(); window.addEventListener('resize', on); return () => window.removeEventListener('resize', on); }, []);
