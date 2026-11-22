@@ -1429,7 +1429,7 @@ export default function FullMapAIPortal() {
           className={`absolute z-20 pointer-events-auto left-0 right-0 bottom-9 md:bottom-5 md:left-[340px] ${isAiBoxMinimized ? 'md:right-48' : isAiCompact ? 'md:right-[344px] lg:right-[364px]' : 'md:right-[380px] lg:right-[440px]'}`}
         >
           <h2 className="px-4 md:px-1 mb-2 md:mb-1.5 text-xs font-black text-[#4A423D] tracking-wide flex items-center md:justify-center">
-            <span className="bg-[#FFFDF9]/90 backdrop-blur-xl rounded-full px-3 py-1 ring-1 ring-[#E8DFD8] shadow-sm flex items-center">
+            <span className="bg-[#FFFDF9]/90 backdrop-blur-xl rounded-full px-3 py-1 ring-1 ring-[#E8DFD8] shadow-sm flex items-center whitespace-nowrap">
               <MapPin className="w-3.5 h-3.5 mr-1 text-[#B88746]" aria-hidden="true" />
               離你最近的寵物店家
             </span>
