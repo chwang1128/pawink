@@ -26,9 +26,6 @@ const VISIT_MIN_AWAY_MS = 15 * 60_000; // 離開不到 15 分鐘就回來，多�
 const VISIT_MAX_AGE_MS = 7 * 86_400_000; // 超過 7 天就不問了
 const ASK_AGAIN_MS = 30 * 86_400_000; // 同一家店 30 天內只問一次
 
-// 從地址取出行政區，例如「106臺北市大安區仁慈里…」→「大安區」
-const districtOf = (address: string | null | undefined) => (address || '').match(/[市縣]([^市縣\d]{1,3}?[區鄉鎮市])/)?.[1] ?? '';
-
 function readJson<T>(key: string): T | null {
   try { const v = window.localStorage.getItem(key); return v ? (JSON.parse(v) as T) : null; } catch { return null; }
 }
@@ -1429,24 +1426,24 @@ export default function FullMapAIPortal() {
       {featuredStores.length > 0 && displayedStores.length === 0 && !selectedDetailStore && (
         <section
           aria-label="附近店家"
-          className="absolute z-20 pointer-events-auto left-0 right-0 bottom-9 md:right-auto md:left-6 md:bottom-10 md:w-[280px] lg:w-[340px]"
+          className={`absolute z-20 pointer-events-auto left-0 right-0 bottom-9 md:bottom-5 md:left-6 ${isAiBoxMinimized ? 'md:right-48' : isAiCompact ? 'md:right-[344px] lg:right-[364px]' : 'md:right-[380px] lg:right-[440px]'}`}
         >
-          <h2 className="px-4 md:px-1 mb-2 text-xs font-black text-[#4A423D] tracking-wide flex items-center">
-            <span className="bg-[#FFFDF9]/90 backdrop-blur-xl rounded-full px-3 py-1 ring-1 ring-[#E8DFD8] shadow-sm flex items-center">
+          <h2 className="px-4 md:px-1 mb-2 md:mb-1.5 text-xs font-black text-[#4A423D] tracking-wide flex items-center">
+            <span className="bg-[#FFFDF9]/90 backdrop-blur-xl rounded-full px-3 py-1 ring-1 ring-[#E8DFD8] shadow-sm flex items-center whitespace-nowrap">
               <MapPin className="w-3.5 h-3.5 mr-1 text-[#B88746]" aria-hidden="true" />
               離你最近的寵物店家
             </span>
             <span className="ml-2 bg-[#FFFDF9]/90 rounded-full px-2 py-0.5 ring-1 ring-[#E8DFD8]"><GoogleMapsAttribution /></span>
           </h2>
-          <ul className="flex md:flex-col gap-3 overflow-x-auto md:overflow-visible snap-x snap-mandatory touch-pan-x md:touch-auto hide-scrollbar px-4 md:px-0 pb-1">
+          <ul className="flex gap-3 md:gap-2 overflow-x-auto snap-x snap-mandatory md:snap-none touch-pan-x hide-scrollbar px-4 md:px-0 pb-1 md:w-max md:max-w-full">
             {featuredStores.map((store, index) => (
               <li
                 key={store.id}
                 data-slot={index + 1}
-                className="card-enter relative w-[78vw] max-w-[320px] md:w-full md:max-w-none h-[80px] md:h-[72px] shrink-0 snap-center bg-[#FFFDF9]/92 backdrop-blur-2xl rounded-[22px] shadow-[0_12px_28px_rgba(184,135,70,0.12)] ring-1 ring-[#E8DFD8] overflow-hidden flex transition-transform hover:-translate-y-0.5 focus-within:ring-2 focus-within:ring-[#B88746]"
+                className="card-enter relative w-[78vw] max-w-[320px] md:w-[224px] h-[80px] md:h-[58px] shrink-0 snap-center bg-[#FFFDF9]/92 backdrop-blur-2xl rounded-[22px] md:rounded-[16px] shadow-[0_12px_28px_rgba(184,135,70,0.12)] ring-1 ring-[#E8DFD8] overflow-hidden flex transition-transform hover:-translate-y-0.5 focus-within:ring-2 focus-within:ring-[#B88746]"
                 style={{ animationDelay: `${index * 0.08}s` }}
               >
-                <div className="relative w-[80px] h-full shrink-0">
+                <div className="relative w-[80px] md:w-[58px] h-full shrink-0">
                   <img src={store.photoUrl} alt="" className="w-full h-full object-cover" />
                   {store.photoAttributions.length > 0 && (
                     <span className="absolute top-1 left-1 right-1 z-10 text-[8px] leading-tight text-white/90 truncate drop-shadow">
@@ -1459,8 +1456,8 @@ export default function FullMapAIPortal() {
                     </span>
                   )}
                 </div>
-                <div className="p-3 flex flex-col justify-center min-w-0 flex-1">
-                  <h3 className="font-black text-[#38312D] text-sm leading-tight truncate">
+                <div className="p-3 md:px-2.5 md:py-1.5 flex flex-col justify-center min-w-0 flex-1">
+                  <h3 className="font-black text-[#38312D] text-sm md:text-[13px] leading-tight truncate">
                     {/* 整張卡片可點：按鈕的 ::after 蓋滿卡片，相片作者連結疊在上層仍可點 */}
                     <button
                       type="button"
@@ -1470,7 +1467,7 @@ export default function FullMapAIPortal() {
                       {store.name}
                     </button>
                   </h3>
-                  <div className="flex items-center mt-1.5 space-x-2 text-[11px] font-bold">
+                  <div className="flex items-center mt-1.5 md:mt-1 space-x-2 text-[11px] font-bold">
                     <span className="text-[#4D8B6F] flex items-center shrink-0">
                       <Navigation className="w-3 h-3 mr-0.5" aria-hidden="true" />
                       <span className="sr-only">距離</span>{store.distanceText}
@@ -1481,8 +1478,6 @@ export default function FullMapAIPortal() {
                         <span aria-hidden="true">{store.rating}</span>
                       </span>
                     )}
-                    {/* 只留行政區，連鎖店才分得出是哪一家；完整地址在店家詳情 */}
-                    {districtOf(store.address) && <span className="text-[#A67C52] font-medium truncate">{districtOf(store.address)}</span>}
                   </div>
                 </div>
               </li>
