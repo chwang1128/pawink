@@ -12,6 +12,10 @@ import { SERVICE_CATEGORIES, type ServiceCategoryKey } from '@/lib/service-categ
 import type { GroundingResult } from '@/lib/grounding';
 import GroundedAnswer, { GroundingLoading } from '@/components/GroundedAnswer';
 import OwnerReports from '@/components/OwnerReports';
+import dynamic from 'next/dynamic';
+
+// 毛孩分身晚一點載入，不拖慢地圖
+const PetCompanion = dynamic(() => import('@/components/PetCompanion'), { ssr: false });
 import ReportPrompt, { type VisitStore } from '@/components/ReportPrompt';
 import { POINTS_PER_REPORT } from '@/lib/report-questions';
 
@@ -1176,17 +1180,18 @@ export default function FullMapAIPortal() {
         <LocateFixed className="w-5 h-5 md:w-6 md:h-6" />
       </button>
 
-      {/* 毛孩樂園入口（登入後顯示） */}
-      {authStatus === 'authenticated' && (
-        <a
-          href="/pet"
-          title="毛孩樂園：用點數養你的毛孩分身"
-          aria-label="毛孩樂園"
-          className="absolute top-[136px] right-3 md:top-[152px] md:right-5 z-20 bg-[#FFF4E5]/95 backdrop-blur-xl shadow-[0_8px_24px_rgba(56,49,45,0.12)] rounded-full w-[46px] h-[46px] md:w-[52px] md:h-[52px] flex flex-col items-center justify-center ring-1 ring-[#F0D9B5] active:scale-95 transition-all"
-        >
-          <span className="text-xl leading-none" aria-hidden="true">{petProfile.type === 'cat' ? '🐱' : '🐶'}</span>
-          <span className="text-[9px] font-black text-[#B88746] leading-none mt-0.5">樂園</span>
-        </a>
+      {/* 毛孩分身：直接站在地圖左下角，可以點、可以拖東西餵牠 */}
+      {hasMounted && (
+        <PetCompanion
+          loggedIn={authStatus === 'authenticated'}
+          guestName={petProfile.name || '毛孩'}
+          hidden={!!selectedDetailStore || isPetModalOpen}
+          hasCarousel={displayedStores.length > 0}
+          hasFeatured={featuredStores.length > 0 && displayedStores.length === 0}
+          chatOpen={!isAiBoxMinimized}
+          onPoints={(p, pending) => { setCoins(p); setPendingCoins(pending); }}
+          onLogin={() => signIn('google')}
+        />
       )}
 
       {showSearchHereBtn && (
