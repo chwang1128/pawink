@@ -75,16 +75,17 @@ export default function PetCompanion({
   refreshKey?: number; // 在商店買完東西後 +1，重新讀背包
 }) {
   const desktop = useIsDesktop();
-  const W = desktop ? 420 : 180; // 舞台寬：桌機加寬讓牠走得開（舞台透明，只有牠本身可以點）
+  const [vw, setVw] = useState(1280);
+  useEffect(() => { const on = () => setVw(window.innerWidth); on(); window.addEventListener('resize', on); return () => window.removeEventListener('resize', on); }, []);
+  // 手機舞台從最左邊開始，右邊留給 AI 按鈕
+  const W = desktop ? 420 : Math.max(180, Math.min(260, vw - 120)); // 舞台寬：桌機加寬讓牠走得開（舞台透明，只有牠本身可以點）
   const H = desktop ? 128 : 104; // 舞台高
   const PET_H = desktop ? 94 : 76; // 毛孩高度（原 112 / 88，縮小一點）
   // 放在地圖左下角，避開店家卡片列與推薦面板
-  const [vw, setVw] = useState(1280);
-  useEffect(() => { const on = () => setVw(window.innerWidth); on(); window.addEventListener('resize', on); return () => window.removeEventListener('resize', on); }, []);
   const wide = vw >= 1024;
   // 桌機：照顧按鈕沿著畫面最左邊直排（標題列下方開始），毛孩站在左下、店家卡片的上方
-  // 手機：照顧按鈕和毛孩放在一起，避開下方的店家卡片
-  const bottom = desktop ? (hasCarousel ? 100 : hasFeatured ? 112 : 16) : (hasCarousel ? 136 : hasFeatured ? 214 : 16);
+  // 手機：工具列直排在上、毛孩站在工具列下方，避開下方的店家卡片
+  const bottom = desktop ? (hasCarousel ? 100 : hasFeatured ? 112 : 16) : (hasCarousel ? 116 : hasFeatured ? 198 : 16);
   const left = desktop ? 12 : 10;
   // 桌機右側 AI 對話框開著時，中間放不下就先縮成頭像（點開時蓋在最上層）
   const chatW = chatWide ? (wide ? 400 : 340) : (wide ? 320 : 300);
@@ -674,9 +675,9 @@ export default function PetCompanion({
     </div>
   );
 
-  // 手機：照顧按鈕和毛孩放在一起
+  // 手機：工具列直排在上面，毛孩站在工具列下方、店家卡片上方
   return (
-    <div ref={rootRef} className={`absolute z-[15] pointer-events-none select-none flex items-end gap-1.5`} style={{ bottom, left }}>
+    <div ref={rootRef} className={`absolute z-[15] pointer-events-none select-none flex flex-col items-start gap-1.5`} style={{ bottom, left }}>
       {column}
       <div style={{ width: W }}>
         {/* 舞台 */}
