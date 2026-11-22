@@ -1,7 +1,8 @@
 datasource db {
   provider  = "postgresql"
-  // Supabase：DATABASE_URL 用 Transaction pooler（port 6543，加 ?pgbouncer=true）給網站連線，
-  // DIRECT_URL 用 Session pooler（port 5432）給資料表遷移使用
+  // Neon（新加坡）：DATABASE_URL 用連線池網址（主機名稱含 -pooler，加 ?sslmode=require&pgbouncer=true&connect_timeout=15）給網站連線，
+  // DIRECT_URL 用直連網址（不含 -pooler）給建表與搬資料使用。
+  // connect_timeout 讓資料庫休眠後醒來的第一次連線有足夠時間
   url       = env("DATABASE_URL")
   directUrl = env("DIRECT_URL")
 }

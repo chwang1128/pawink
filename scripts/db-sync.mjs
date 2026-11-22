@@ -1,4 +1,4 @@
-// 部署時把 prisma/schema.prisma 同步到資料庫（Supabase），並對所有資料表開啟 RLS。
+// 部署時把 prisma/schema.prisma 同步到資料庫（Neon；原為 Supabase），並對所有資料表開啟 RLS。
 //
 // 何時執行：
 // - Production 部署：執行
@@ -22,8 +22,7 @@ if (env === 'preview' && process.env.ALLOW_PREVIEW_DB_SYNC !== '1') {
 // 不加 --accept-data-loss：若變更會刪除資料，指令會失敗並中止部署，而不是默默刪資料
 execSync('npx prisma db push --skip-generate', { stdio: 'inherit' });
 
-// Supabase 會把 public schema 的資料表自動開放在 Data API（REST）。
-// 對每張表開啟 RLS 且不建立任何 policy：Data API 的 anon / authenticated 角色一律讀寫不到；
+// 對每張表開啟 RLS 且不建立任何 policy：其他角色一律讀寫不到（Supabase 的 Data API、Neon 的 Data API 皆同）；
 // Prisma 以資料表擁有者身分連線，不受 RLS 影響，網站照常運作。
 const enableRls = `
 DO $$
