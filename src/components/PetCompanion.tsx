@@ -425,7 +425,7 @@ export default function PetCompanion({
   useEffect(() => {
     if (minimized || hidden) return;
     const t = window.setInterval(() => {
-      if (asleepRef.current || out !== 'home' || busyRef.current || dragging.current || Date.now() - lastInteract.current < 4000) return;
+      if (asleepRef.current || out !== 'home' || busyRef.current || dragging.current || Date.now() - lastInteract.current < 2000) return;
       if (memorial) { if (Math.random() < 0.3) act('sit', 3000); return; }
       // 狀態優先：餓（趴著）＞ 髒（抓耳朵＋灰塵）＞ 寂寞（坐著歪頭）＞ 平常
       // 抓耳朵、歪頭只在髒、寂寞時出現，飼主一看就知道要做什麼
@@ -441,7 +441,7 @@ export default function PetCompanion({
       else if (roll < 0.8) act('sniff', 1600);
       else if (roll < 0.9) act('sit', 2000);
       else setHop(h => h + 1);
-    }, 3500);
+    }, 2000); // 沒事時每 2 秒動一次
     return () => window.clearInterval(t);
   }, [minimized, hidden, hungry, dirty, lonely, memorial, W, H, PET_H, walkTo, act, burst, out]);
 
