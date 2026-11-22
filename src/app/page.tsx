@@ -1113,6 +1113,9 @@ export default function FullMapAIPortal() {
                         {session?.user?.email && <div className="truncate">{session.user.email}</div>}
                         {coins !== null && <div className="mt-1 font-black text-[#B88746]">點數 {coins.toLocaleString()} P{pendingCoins > 0 && <span className="font-bold text-[#A67C52]">（另有 {pendingCoins} P 確認中）</span>}</div>}
                       </div>
+                      <a href="/pet" role="menuitem" className="w-full flex items-center px-3 py-2.5 rounded-xl text-sm font-bold text-[#4A423D] hover:bg-[#F7F2EA]">
+                        <PawPrint className="w-4 h-4 mr-2 text-[#B88746]" />毛孩樂園（用點數養分身）
+                      </a>
                       <button type="button" role="menuitem" onClick={() => signOut()} className="w-full flex items-center px-3 py-2.5 rounded-xl text-sm font-bold text-[#4A423D] hover:bg-[#F7F2EA]">
                         <LogOut className="w-4 h-4 mr-2" />登出
                       </button>
@@ -1139,11 +1142,11 @@ export default function FullMapAIPortal() {
           )}
 
           {coins !== null && (
-            <div title="飼主回報可累積點數" className={`${glassmorphism} hidden md:flex px-4 py-2.5 rounded-full text-sm font-black text-[#B88746] items-center space-x-1.5 bg-[#FFFDF9]`}>
+            <a href="/pet" title="到毛孩樂園用點數" aria-label={`點數 ${coins} P，到毛孩樂園`} className={`${glassmorphism} hidden md:flex px-4 py-2.5 rounded-full text-sm font-black text-[#B88746] items-center space-x-1.5 bg-[#FFFDF9] hover:bg-[#F7F2EA]`}>
               <Coins className="w-4 h-4 text-[#C59B63]" />
               <span className="hidden md:inline">{coins.toLocaleString()} P</span>
               {pendingCoins > 0 && <span className="hidden md:inline text-[11px] font-bold text-[#A67C52]">＋{pendingCoins} 確認中</span>}
-            </div>
+            </a>
           )}
         </div>
       </header>

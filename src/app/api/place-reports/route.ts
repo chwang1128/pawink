@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { randomUUID } from 'crypto';
 import { prisma } from '@/lib/prisma';
+import { giveReportTreat } from '@/lib/vpet/service';
 import { getCurrentUserId } from '@/lib/auth';
 import {
   ANON_COOKIE, ANON_REPORTS_PER_IP_DAILY, DAILY_REPORT_POINTS_CAP, FLAG_MIN_ACCOUNT_DAYS, ON_SITE_METERS, POINTS_PENDING_DAYS, POINTS_PER_REPORT, REFRESH_SAME_ANSWER_DAYS, REPORTS_PER_MINUTE,
@@ -129,10 +130,10 @@ export async function POST(req: Request) {
           // 同樣的答案隔 30 天以上再按：更新時間，表示最近仍然如此（避免一直按來延長有效期）
           await tx.placeReport.update({ where: { id: existing.id }, data: { answer, onSite: existing.onSite || onSite } });
         }
-        return { awarded: 0, capped: false };
+        return { awarded: 0, capped: false, created: false };
       }
       const created = await tx.placeReport.create({ data: { placeId, userId, voterKey, question, answer, onSite } });
-      if (!userId) return { awarded: 0, capped: false }; // 未登入不給點
+      if (!userId) return { awarded: 0, capped: false, created: true }; // 未登入不給點
       // 每天（台灣時間）從回報拿到的點數上限（含確認中）；回答數量不限
       const earned = await tx.pointLedger.aggregate({
         where: { userId, reason: 'report', status: { in: ['pending', 'granted'] }, createdAt: { gte: todayStartTW() } },
@@ -145,10 +146,12 @@ export async function POST(req: Request) {
           data: { userId, amount: awarded, reason: 'report', refId: created.id, status: 'pending', availableAt: new Date(Date.now() + POINTS_PENDING_DAYS * DAY) },
         });
       }
-      return { awarded, capped: awarded < POINTS_PER_REPORT };
+      return { awarded, capped: awarded < POINTS_PER_REPORT, created: true };
     });
+    // 每天第一次回報：送毛孩分身一份零食（不用等 7 天）
+    const treat = userId && result.created ? await giveReportTreat(userId) : false;
     const pts = userId ? await pointsSummary(prisma, userId) : {};
-    return reply({ ...(await summary(placeId, kind, userId, anonId)), ...result, onSite, ...pts });
+    return reply({ ...(await summary(placeId, kind, userId, anonId)), ...result, onSite, treat, ...pts });
   } catch (e: any) {
     // 兩個請求同時送出時，唯一鍵衝突：視為已回答
     if (e?.code === 'P2002') return reply({ ...(await summary(placeId, kind, userId, anonId)), awarded: 0, capped: false });

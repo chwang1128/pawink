@@ -34,6 +34,9 @@ model User {
   reportFlags   PlaceReportFlag[]
   pointLedger   PointLedger[]
   pets          Pet[]
+  virtualPets   VirtualPet[]
+  inventory     Inventory[]
+  rewardClaims  RewardClaim[]
   merchant      Merchant?
   appointments  Appointment[]
   accounts      Account[]
@@ -93,6 +96,7 @@ model Pet {
   medBrand      String?
   medLastDate   DateTime?
   vaccines      VaccineRecord[]
+  virtualPet    VirtualPet?
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @default(now()) @updatedAt
 
@@ -202,4 +206,83 @@ model PlaceReportFlag {
 
   @@unique([placeId, question, userId])
   @@index([placeId])
+}
+
+// ---- 毛孩數位分身（點數兌換遊戲）----
+// 每個寵物檔案一隻分身。會餓、會髒、會想你，但不會死；數值在讀取時依經過時間計算，不需要排程。
+model VirtualPet {
+  id           String    @id @default(uuid())
+  petId        String    @unique
+  pet          Pet       @relation(fields: [petId], references: [id], onDelete: Cascade)
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  species      String    // dog / cat
+  headKey      String    // 頭型（依品種）
+  coatKey      String    @default("default")
+  fullness     Float     @default(80) // 飽足 0–100
+  cleanliness  Float     @default(80) // 清潔 0–100
+  mood         Float     @default(80) // 心情 0–100
+  xp           Int       @default(0)  // 親密度經驗，只升不降
+  dailyXp      Int       @default(0)
+  dailyXpDate  String?   // 台灣日期 YYYY-MM-DD
+  sparkleUntil DateTime? // 泡泡沐浴球的閃亮特效
+  lastTickAt   DateTime  @default(now())
+  lastPetAt    DateTime?
+  lastPlayAt   DateTime?
+  lastBathAt   DateTime?
+  memorialAt   DateTime? // 彩虹橋紀念模式
+  version      Int       @default(0) // 樂觀鎖：同時操作時只有一個會成功
+  equipped     VirtualPetEquip[]
+  events       PetCareEvent[]
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([userId])
+}
+
+// 分身身上穿戴的物品（每個部位一件）
+model VirtualPetEquip {
+  vpetId String
+  vpet   VirtualPet @relation(fields: [vpetId], references: [id], onDelete: Cascade)
+  slot   String
+  sku    String
+
+  @@id([vpetId, slot])
+}
+
+// 飼主的物品（綁帳號，多隻寵物共用）
+model Inventory {
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sku       String
+  qty       Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  @@id([userId, sku])
+}
+
+// 照顧紀錄（每日免費飼料次數、每日任務、防刷）
+model PetCareEvent {
+  id        String     @id @default(uuid())
+  vpetId    String
+  vpet      VirtualPet @relation(fields: [vpetId], references: [id], onDelete: Cascade)
+  userId    String
+  type      String     // feed / treat / bath / play / pet
+  sku       String?
+  dayKey    String     // 台灣日期 YYYY-MM-DD
+  createdAt DateTime   @default(now())
+
+  @@index([vpetId, dayKey])
+  @@index([userId, dayKey])
+}
+
+// 一段期間只能領一次的獎勵（例如每天第一次回報送的零食）
+model RewardClaim {
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind      String
+  periodKey String
+  createdAt DateTime @default(now())
+
+  @@id([userId, kind, periodKey])
 }
