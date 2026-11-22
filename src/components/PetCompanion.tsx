@@ -85,7 +85,7 @@ export default function PetCompanion({
   const wide = vw >= 1024;
   // 桌機：照顧按鈕沿著畫面最左邊直排（標題列下方開始），毛孩站在左下、店家卡片的上方
   // 手機：工具列直排在上、毛孩站在工具列下方，避開下方的店家卡片
-  const bottom = desktop ? (hasCarousel ? 100 : hasFeatured ? 112 : 16) : (hasCarousel ? 116 : hasFeatured ? 198 : 16);
+  const bottom = desktop ? (hasCarousel ? 100 : hasFeatured ? 112 : 16) : (hasCarousel ? 106 : hasFeatured ? 142 : 16);
   const left = desktop ? 12 : 10;
   // 桌機右側 AI 對話框開著時，中間放不下就先縮成頭像（點開時蓋在最上層）
   const chatW = chatWide ? (wide ? 400 : 340) : (wide ? 320 : 300);
