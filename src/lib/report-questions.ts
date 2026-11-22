@@ -72,3 +72,11 @@ export const POINTS_PER_REPORT = 2;
 export const DAILY_REPORT_POINTS_CAP = 20;
 // 防洗版：每位飼主每分鐘最多送出幾次回報
 export const REPORTS_PER_MINUTE = 15;
+
+// ---- 防亂回報 ----
+export const MIN_REPORTS_FOR_CONCLUSION = 3; // 至少幾人回報才顯示結論
+export const REPORT_WINDOW_DAYS = 365; // 只統計近 12 個月
+export const FLAG_WINDOW_DAYS = 90; // 「可能已改變」只看近 90 天
+export const FLAGS_TO_WARN = 2; // 幾人反映就顯示提醒
+export const POINTS_PENDING_DAYS = 7; // 點數確認中天數
+export const ON_SITE_METERS = 300; // 距離店家多近算現場回報

@@ -31,6 +31,7 @@ model User {
   role          Role           @default(PET_OWNER)
   points        Int            @default(100) // 註冊禮 100 點
   placeReports  PlaceReport[]
+  reportFlags   PlaceReportFlag[]
   pointLedger   PointLedger[]
   pets          Pet[]
   merchant      Merchant?
@@ -163,6 +164,7 @@ model PlaceReport {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   question  String
   answer    Boolean
+  onSite    Boolean  @default(false) // 回報時人在店家附近（只比對距離，不保存位置）
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -178,8 +180,24 @@ model PointLedger {
   amount    Int
   reason    String   // 例如 report：飼主回報
   refId     String?  // 例如對應的 PlaceReport id
+  // pending：確認中（先讓使用者看到，7 天後才入帳）；granted：已入帳；void：回報被多數推翻而取消
+  status      String    @default("granted")
+  availableAt DateTime?
   createdAt DateTime @default(now())
 
   @@index([userId, createdAt])
   @@unique([userId, reason, refId]) // 同一筆回報只能發一次點數
+}
+
+// 「這題可能已改變」：飼主覺得某家店某一題的回報過時或有誤
+model PlaceReportFlag {
+  id        String   @id @default(uuid())
+  placeId   String
+  question  String
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([placeId, question, userId])
+  @@index([placeId])
 }
