@@ -47,6 +47,7 @@ export async function GET(req: Request) {
       geometry: { location: { lat: p.lat, lng: p.lng } },
       rating: p.rating ?? undefined,
       user_ratings_total: p.userRatingCount ?? undefined,
+      primaryType: p.primaryType ?? undefined,
       photoUrl: photoProxyUrl(p.photoName),
       photoAttributions: p.photoAttributions,
       // 點開店家時向 /api/place-details 出示的憑證

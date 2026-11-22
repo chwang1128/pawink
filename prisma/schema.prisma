@@ -29,7 +29,9 @@ model User {
   image         String?
   avatar        String?
   role          Role           @default(PET_OWNER)
-  points        Int            @default(2000)
+  points        Int            @default(100) // 註冊禮 100 點
+  placeReports  PlaceReport[]
+  pointLedger   PointLedger[]
   pets          Pet[]
   merchant      Merchant?
   appointments  Appointment[]
@@ -150,4 +152,33 @@ model UsageCounter {
   key       String   @id
   count     Int      @default(0)
   updatedAt DateTime @updatedAt
+}
+
+// 飼主回報：某位飼主對某家店某一題的回答（是／否）。同一人同一店同一題只有一筆，可改答案。
+// placeId 是 Google 地點 ID（Google 條款允許長期保存）。
+model PlaceReport {
+  id        String   @id @default(uuid())
+  placeId   String
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  question  String
+  answer    Boolean
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([placeId, userId, question])
+  @@index([placeId])
+}
+
+// 點數異動紀錄（每一次加點、扣點都留紀錄，方便查帳與防刷）
+model PointLedger {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount    Int
+  reason    String   // 例如 report：飼主回報
+  refId     String?  // 例如對應的 PlaceReport id
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
 }
