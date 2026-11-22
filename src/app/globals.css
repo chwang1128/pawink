@@ -22,3 +22,8 @@ html, body {
 @keyframes petsquash { 0% { transform: scale(1, 1); } 30% { transform: scale(1.12, .86); } 60% { transform: scale(.94, 1.08); } 100% { transform: scale(1, 1); } }
 @keyframes petzzz { 0% { transform: translate(0, 0); opacity: 0; } 20% { opacity: .9; } 100% { transform: translate(10px, -26px); opacity: 0; } }
 @keyframes petshake { 0%, 100% { transform: rotate(0); } 25% { transform: rotate(-6deg); } 75% { transform: rotate(6deg); } }
+
+/* 毛孩商店：開窗、手機抽屜上滑 */
+@keyframes shopfade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes shoppop { from { opacity: 0; transform: scale(.96); } to { opacity: 1; transform: scale(1); } }
+@keyframes shopsheet { from { transform: translateY(40px); opacity: .6; } to { transform: translateY(0); opacity: 1; } }

@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useSession, signIn, signOut } from 'next-auth/react';
 import { 
-  Quote, PawPrint, Sparkles, Send, MapPin, 
+  Quote, Sparkles, Send, MapPin, 
   X, Coins, Star, RefreshCcw, Search, ChevronRight,
   Clock, Phone, Navigation, Map, MessageCircle, Globe, ChevronUp, ChevronDown,
   Edit3, Heart, AlertCircle, Pill, Syringe, Activity, ExternalLink, CheckCircle2, XCircle, FileText, LocateFixed, Mic
@@ -16,6 +16,7 @@ import dynamic from 'next/dynamic';
 
 // 毛孩分身晚一點載入，不拖慢地圖
 const PetCompanion = dynamic(() => import('@/components/PetCompanion'), { ssr: false });
+const PetShop = dynamic(() => import('@/components/PetShop'), { ssr: false });
 import ReportPrompt, { type VisitStore } from '@/components/ReportPrompt';
 import { POINTS_PER_REPORT } from '@/lib/report-questions';
 
@@ -193,6 +194,8 @@ export default function FullMapAIPortal() {
   const [coins, setCoins] = useState<number | null>(null);
   // 確認中的點數（飼主回報後 7 天才入帳）
   const [pendingCoins, setPendingCoins] = useState(0);
+  const [shopOpen, setShopOpen] = useState(false);
+  const [petRefresh, setPetRefresh] = useState(0);
   // 預設收起，避免手機先閃出對話框；桌面版掛載後再展開
   const [isAiBoxMinimized, setIsAiBoxMinimized] = useState(true);
   // 桌機預設開一個小對話框；飼主開始對話或按放大才變大
@@ -1125,9 +1128,6 @@ export default function FullMapAIPortal() {
                         {session?.user?.email && <div className="truncate">{session.user.email}</div>}
                         {coins !== null && <div className="mt-1 font-black text-[#B88746]">點數 {coins.toLocaleString()} P{pendingCoins > 0 && <span className="font-bold text-[#A67C52]">（另有 {pendingCoins} P 確認中）</span>}</div>}
                       </div>
-                      <a href="/pet" role="menuitem" className="w-full flex items-center px-3 py-2.5 rounded-xl text-sm font-bold text-[#4A423D] hover:bg-[#F7F2EA]">
-                        <PawPrint className="w-4 h-4 mr-2 text-[#B88746]" />毛孩樂園（用點數養分身）
-                      </a>
                       <button type="button" role="menuitem" onClick={() => signOut()} className="w-full flex items-center px-3 py-2.5 rounded-xl text-sm font-bold text-[#4A423D] hover:bg-[#F7F2EA]">
                         <LogOut className="w-4 h-4 mr-2" />登出
                       </button>
@@ -1203,8 +1203,17 @@ export default function FullMapAIPortal() {
           getMap={() => mapRef.current}
           stores={displayedStores.map(st => ({ lat: st.lat, lng: st.lng, name: st.name }))}
           walkHome={userLocation}
+          onShop={() => setShopOpen(true)}
+          refreshKey={petRefresh}
         />
       )}
+      {/* 毛孩商店：從左邊工具列的「商店」打開 */}
+      <PetShop
+        open={shopOpen}
+        onClose={() => setShopOpen(false)}
+        onLogin={() => signIn('google')}
+        onBought={(p, pending) => { setCoins(p); setPendingCoins(pending); setPetRefresh(n => n + 1); }}
+      />
 
       {showSearchHereBtn && (
         <div className="absolute top-[108px] md:top-24 left-0 right-0 z-20 flex justify-center pointer-events-none animate-in fade-in slide-in-from-top-4">
