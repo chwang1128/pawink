@@ -11,7 +11,6 @@ const Q = {
   large_dog: '接受大型犬',
   cat_ok: '接受貓',
   owner_can_watch: '可陪同或看得到美容過程',
-  by_appointment: '採全預約制',
   night_emergency: '有夜間急診',
   exotic_ok: '有看非犬貓（兔、鼠、鳥、爬蟲等）',
   cat_friendly: '有貓專用候診區或診間',
@@ -35,20 +34,22 @@ const Q = {
   staff_advice: '店員能給餵養或用品建議',
   waste_bin: '有撿便袋或垃圾桶',
   shade: '有遮蔭或休息座位',
+  groom_large_dog: '美容服務接受大型犬',
+  groom_by_appointment: '美容採全預約制',
 } as const;
 type QKey = keyof typeof Q;
 
 // 每種店家 5 題（「生活館」是寵物用品店兼美容，題目混合兩邊）
 const SETS: Record<ReportKind, QKey[]> = {
   boarding: ['no_cage', 'staff_overnight', 'photo_updates', 'large_dog', 'cat_ok'],
-  grooming: ['large_dog', 'cat_ok', 'owner_can_watch', 'by_appointment', 'pickup'],
+  grooming: ['groom_large_dog', 'cat_ok', 'owner_can_watch', 'groom_by_appointment', 'pickup'],
   vet: ['night_emergency', 'exotic_ok', 'cat_friendly', 'fee_list', 'parking'],
   dining: ['indoor_ok', 'floor_ok', 'large_dog', 'pet_menu', 'water_bowl'],
   lodging: ['same_room', 'large_dog', 'cat_ok', 'pet_amenities', 'walk_space'],
   store: ['pets_enter', 'fresh_food', 'rx_food', 'staff_advice', 'parking'],
-  mixed: ['fresh_food', 'rx_food', 'large_dog', 'owner_can_watch', 'by_appointment'],
+  mixed: ['fresh_food', 'rx_food', 'groom_large_dog', 'owner_can_watch', 'groom_by_appointment'],
   park: ['fenced_area', 'small_dog_area', 'water', 'waste_bin', 'shade'],
-  general: ['pets_welcome', 'indoor_ok', 'large_dog', 'cat_ok', 'parking'],
+  general: ['pets_welcome', 'floor_ok', 'large_dog', 'cat_ok', 'parking'],
 };
 
 const LODGING = /^(lodging|hotel|motel|bed_and_breakfast|guest_house|hostel|inn|resort_hotel|campground|cottage|farmstay|japanese_inn|budget_japanese_inn|private_guest_room|extended_stay_hotel)$/;
@@ -59,7 +60,8 @@ export function kindOf(primaryType: string | null | undefined, name = ''): Repor
   if (t === 'veterinary_care') return 'vet';
   if (t === 'pet_boarding_service') return 'boarding';
   // 寵物生活館、寵物百貨：通常同時賣用品又有美容
-  if ((t === 'pet_store' || t === 'pet_care' || !t) && /(生活館|百貨)/.test(name)) return 'mixed';
+  // 沒有類型時要店名帶寵物字眼，避免把一般百貨公司當成寵物生活館
+  if ((t === 'pet_store' || t === 'pet_care' || (!t && /(寵物|毛孩)/.test(name))) && /(生活館|百貨)/.test(name)) return 'mixed';
   if (t === 'pet_store') return /(美容|洗澡|spa|grooming|salon)/i.test(name) ? 'mixed' : 'store';
   if (t === 'dog_park' || t === 'park') return 'park';
   if (LODGING.test(t)) return /(寵物|毛孩|狗|犬|貓)(旅館|住宿|寄宿|安親)/.test(name) ? 'boarding' : 'lodging';

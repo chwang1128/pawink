@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { kindOf, POINTS_PER_REPORT, DAILY_REPORT_POINTS_CAP, POINTS_PENDING_DAYS, type ReportQuestion } from '@/lib/report-questions';
+import { kindOf, POINTS_PER_REPORT, DAILY_REPORT_POINTS_CAP, POINTS_PENDING_DAYS, MIN_REPORTS_TO_OVERTURN, type ReportQuestion } from '@/lib/report-questions';
 
 // 飼主回報：飼主依自己的經驗回答是／否。這是 Pawink 自己的資料，和 Google 評論分開顯示。
 // variant="summary"：放在店家卡，只顯示結果與「我去過，幫忙回報」按鈕
@@ -23,7 +23,7 @@ const countText = (t: Tally) =>
   `是 ${t.yes}・否 ${t.no}${t.onSite ? `（${t.onSite} 人現場回報）` : ''}${t.lastAt ? `・最近 ${monthText(t.lastAt)}` : ''}`;
 
 export default function OwnerReports({
-  variant, placeId, primaryType, name, place, here, refreshKey, onPoints, onLogin, onOpenForm,
+  variant, placeId, primaryType, name, place, here, refreshKey, onPoints, onLogin, onOpenForm, onAnswered,
 }: {
   variant: 'summary' | 'form';
   placeId: string;
@@ -35,6 +35,7 @@ export default function OwnerReports({
   onPoints?: (points: number, pending: number) => void;
   onLogin: () => void;
   onOpenForm?: () => void;
+  onAnswered?: () => void; // 有送出回答或反映時通知（關窗後才需要更新店家卡）
 }) {
   const kind = kindOf(primaryType, name);
   const [data, setData] = useState<Summary | null>(null);
@@ -65,6 +66,7 @@ export default function OwnerReports({
       const j = await res.json();
       if (!res.ok) { setNote(j.error || '回報暫時無法送出'); return null; }
       setData(j);
+      onAnswered?.();
       if (typeof j.points === 'number') onPoints?.(j.points, j.pending ?? 0);
       return j;
     } catch {
@@ -117,7 +119,7 @@ export default function OwnerReports({
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <span className="font-bold">{q.label}</span>
                     {v && <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-md ${v.cls}`}>{v.text}</span>}
-                    <span className="text-[10px] text-[#8C7A6B]">{countText(t)}</span>
+                    <span className="text-[10px] text-[#8C7A6B]">{countText(t)}{t.yes + t.no < MIN_REPORTS_TO_OVERTURN ? '・回報還少，僅供參考' : ''}</span>
                   </div>
                   {t.flagged && <div className="text-[10px] font-bold text-[#C0705A]">近期有飼主反映可能已改變</div>}
                 </li>
@@ -129,7 +131,7 @@ export default function OwnerReports({
           <button
             type="button"
             onClick={onOpenForm}
-            className="mt-3 w-full text-[12px] font-black text-[#B88746] bg-[#FFF4E5] ring-1 ring-[#F0D9B5] hover:bg-[#FCEBD2] rounded-2xl py-2.5 transition-all active:scale-[0.98]"
+            className="mt-2 text-[12px] font-black text-[#B88746] underline underline-offset-2 hover:text-[#A67C52]"
           >
             我去過，幫忙回報（每題 {POINTS_PER_REPORT} 點）
           </button>
@@ -145,7 +147,7 @@ export default function OwnerReports({
         {data && !data.loggedIn
           ? `不登入也能回報；登入後每題可得 ${POINTS_PER_REPORT} 點。`
           : `第一次回報每題 ${POINTS_PER_REPORT} 點（${POINTS_PENDING_DAYS} 天後入帳），每天最多 ${DAILY_REPORT_POINTS_CAP} 點。`}
-        不確定的題目可以略過不答。
+        點「是／否」就會送出，不確定的題目可以略過。
       </p>
 
       {!data ? (
