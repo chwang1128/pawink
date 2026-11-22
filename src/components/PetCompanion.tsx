@@ -628,7 +628,7 @@ export default function PetCompanion({
             </div>
           )}
           {out === 'home' && !asleep && !busyRef.current && !showStats && (
-            <button type="button" onClick={goWalk} style={{ left: Math.min(Math.max(x - 40, 4), W - 96) }} className="absolute top-1 pointer-events-auto px-2 py-1 rounded-full text-[10px] font-black text-[#4D8B6F] bg-[#FFFDF9]/90 ring-1 ring-[#CFE3D7] shadow-sm active:scale-95">🦮 帶去散步</button>
+            <button type="button" onClick={goWalk} style={{ left: x + PET_H * 0.45 + 78 <= W ? x + PET_H * 0.45 : Math.max(x - PET_H * 0.45 - 78, 4) }} className="absolute bottom-0 pointer-events-auto px-2 py-1 rounded-full text-[10px] font-black text-[#4D8B6F] bg-[#FFFDF9]/90 ring-1 ring-[#CFE3D7] shadow-sm active:scale-95">🦮 帶去散步</button>
           )}
           {particles.map(p => (
             <span key={p.id} className={`absolute pointer-events-none -translate-x-1/2 animate-[petfloat_1.3s_ease-out_forwards] ${p.cls || ''}`} style={{ left: p.x, top: p.y }} aria-hidden="true">{p.text}</span>
@@ -719,7 +719,7 @@ export default function PetCompanion({
             </div>
           )}
           {out === 'home' && !asleep && !busyRef.current && !showStats && (
-            <button type="button" onClick={goWalk} style={{ left: Math.min(Math.max(x - 40, 4), W - 96) }} className="absolute top-1 pointer-events-auto px-2 py-1 rounded-full text-[10px] font-black text-[#4D8B6F] bg-[#FFFDF9]/90 ring-1 ring-[#CFE3D7] shadow-sm active:scale-95">🦮 帶去散步</button>
+            <button type="button" onClick={goWalk} style={{ left: x + PET_H * 0.45 + 78 <= W ? x + PET_H * 0.45 : Math.max(x - PET_H * 0.45 - 78, 4) }} className="absolute bottom-0 pointer-events-auto px-2 py-1 rounded-full text-[10px] font-black text-[#4D8B6F] bg-[#FFFDF9]/90 ring-1 ring-[#CFE3D7] shadow-sm active:scale-95">🦮 帶去散步</button>
           )}
           {particles.map(p => (
             <span key={p.id} className={`absolute pointer-events-none -translate-x-1/2 animate-[petfloat_1.3s_ease-out_forwards] ${p.cls || ''}`} style={{ left: p.x, top: p.y }} aria-hidden="true">{p.text}</span>
