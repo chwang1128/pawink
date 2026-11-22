@@ -309,7 +309,8 @@ export default function FullMapAIPortal() {
   // grounding：AI 查證結果（Google 地圖／網路）。這類訊息只顯示，不送回給我們的 AI 當對話紀錄，
   // 避免把 Google 地圖內容拿去產生新內容（Google Maps Platform 條款 3.2.3(c)）
   const [messages, setMessages] = useState<Array<{ sender: 'ai' | 'user'; text: string; grounding?: GroundingResult | 'loading'; gid?: number }>>([
-    { sender: 'ai', text: `嗨！我是 Pawink 毛孩助理 🐾 想幫【${petProfile.name}】找什麼？可以直接說，例如「附近的動物醫院」「下週出國要寄宿」，也可以問照顧上的問題。` }
+    // 開場只留一句，加上一排範例，小對話框不用捲動就看得完
+    { sender: 'ai', text: `想幫 ${petProfile.name} 找什麼？` }
   ]);
   
   const [inputQuery, setInputQuery] = useState('');
@@ -1262,13 +1263,13 @@ export default function FullMapAIPortal() {
               ))}
               {/* 剛打開時給幾個範例問題，點了就直接送出 */}
               {messages.length === 1 && !isAiTyping && (
-                <div className="flex flex-wrap gap-2 pl-1">
-                  {['附近的動物醫院', '下週出國，要找寄宿', '附近可以帶狗的餐廳', '狗可以吃葡萄嗎？'].map(q => (
+                <div className="flex flex-wrap gap-1.5 pl-1">
+                  {['附近動物醫院', '找寄宿', '寵物友善餐廳'].map(q => (
                     <button
                       key={q}
                       type="button"
                       onClick={() => handleSendMessage(q)}
-                      className="text-xs font-bold text-[#8A6A3E] bg-[#F7F2EA] hover:bg-[#EFE5D8] ring-1 ring-[#E8DFD8] rounded-full px-3 py-2 active:scale-95"
+                      className="text-xs font-bold text-[#8A6A3E] bg-[#F7F2EA] hover:bg-[#EFE5D8] ring-1 ring-[#E8DFD8] rounded-full px-3 py-1.5 active:scale-95"
                     >
                       {q}
                     </button>
