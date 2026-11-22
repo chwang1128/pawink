@@ -1439,10 +1439,10 @@ export default function FullMapAIPortal() {
               <li
                 key={store.id}
                 data-slot={index + 1}
-                className="card-enter relative w-[78vw] max-w-[320px] md:w-full md:max-w-none h-[104px] md:h-[96px] shrink-0 snap-center bg-[#FFFDF9]/92 backdrop-blur-2xl rounded-[22px] shadow-[0_12px_28px_rgba(184,135,70,0.12)] ring-1 ring-[#E8DFD8] overflow-hidden flex transition-transform hover:-translate-y-0.5 focus-within:ring-2 focus-within:ring-[#B88746]"
+                className="card-enter relative w-[78vw] max-w-[320px] md:w-full md:max-w-none h-[80px] md:h-[72px] shrink-0 snap-center bg-[#FFFDF9]/92 backdrop-blur-2xl rounded-[22px] shadow-[0_12px_28px_rgba(184,135,70,0.12)] ring-1 ring-[#E8DFD8] overflow-hidden flex transition-transform hover:-translate-y-0.5 focus-within:ring-2 focus-within:ring-[#B88746]"
                 style={{ animationDelay: `${index * 0.08}s` }}
               >
-                <div className="relative w-[96px] h-full shrink-0">
+                <div className="relative w-[80px] h-full shrink-0">
                   <img src={store.photoUrl} alt="" className="w-full h-full object-cover" />
                   {store.photoAttributions.length > 0 && (
                     <span className="absolute top-1 left-1 right-1 z-10 text-[8px] leading-tight text-white/90 truncate drop-shadow">
@@ -1478,7 +1478,6 @@ export default function FullMapAIPortal() {
                       </span>
                     )}
                   </div>
-                  <p className="text-[11px] text-[#A67C52] truncate mt-1">{store.address}</p>
                 </div>
               </li>
             ))}
