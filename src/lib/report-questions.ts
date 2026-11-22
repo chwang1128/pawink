@@ -90,7 +90,6 @@ export const REPORTS_PER_MINUTE = 15;
 // ---- 防亂回報 ----
 export const MIN_REPORTS_FOR_CONCLUSION = 1; // 至少幾人回報才顯示結論（目前使用者少，先 1 人；人多再調高）
 export const MIN_REPORTS_TO_OVERTURN = 3; // 至少幾人回報，相反的多數才會讓確認中點數被取消（避免一個人就能取消別人的點數）
-export const REPORT_WINDOW_DAYS = 365; // 只統計近 12 個月
 export const FLAG_WINDOW_DAYS = 90; // 「可能已改變」只看近 90 天
 export const FLAGS_TO_WARN = 2; // 幾人反映就顯示提醒
 export const POINTS_PENDING_DAYS = 7; // 點數確認中天數

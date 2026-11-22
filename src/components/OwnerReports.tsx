@@ -104,7 +104,7 @@ export default function OwnerReports({
           <span className="w-1.5 h-3.5 rounded-full bg-[#B88746] mr-2"></span>
           飼主回報
         </h3>
-        <p className="text-[10px] text-[#8C7A6B] mb-2.5">來自 Pawink 飼主的親身經驗，只統計近 12 個月，僅供參考，不代表店家或 Pawink 認證。</p>
+        <p className="text-[10px] text-[#8C7A6B] mb-2.5">來自 Pawink 飼主的親身經驗，僅供參考，不代表店家或 Pawink 認證。</p>
         {!data ? (
           <div className="text-[11px] text-[#A67C52]">讀取中…</div>
         ) : answered.length === 0 ? (
