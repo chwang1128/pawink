@@ -61,6 +61,8 @@ interface Store {
   detailsToken: string;
   // Google 地點的主要類型，用來決定飼主回報的題目
   primaryType?: string | null;
+  // 店家座標的簽章（現場回報用）
+  locToken?: string;
   distanceKm?: number;
   distanceText?: string;
   // AI 查證（Google 地圖 Grounding）的回覆有引用這家店
@@ -690,6 +692,7 @@ export default function FullMapAIPortal() {
           photoAttributions: Array.isArray(place.photoAttributions) ? place.photoAttributions : [],
           detailsToken: place.detailsToken || '',
           primaryType: typeof place.primaryType === 'string' ? place.primaryType : null,
+          locToken: typeof place.locToken === 'string' ? place.locToken : undefined,
           distanceKm,
           distanceText: distanceKm < 1 ? `${Math.round(distanceKm * 1000)}m` : `${distanceKm.toFixed(1)}km`,
         };
@@ -1472,7 +1475,7 @@ export default function FullMapAIPortal() {
                 placeId={selectedDetailStore.id}
                 primaryType={selectedDetailStore.primaryType}
                 name={selectedDetailStore.name}
-                place={{ lat: selectedDetailStore.lat, lng: selectedDetailStore.lng }}
+                place={{ lat: selectedDetailStore.lat, lng: selectedDetailStore.lng, token: selectedDetailStore.locToken }}
                 here={userLocation}
                 onPoints={(p, pending) => { setCoins(p); setPendingCoins(pending); }}
                 onLogin={() => signIn('google')}

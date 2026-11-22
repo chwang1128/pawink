@@ -2,10 +2,11 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getCurrentUserId } from '@/lib/auth';
 import {
-  DAILY_REPORT_POINTS_CAP, ON_SITE_METERS, POINTS_PENDING_DAYS, POINTS_PER_REPORT, REPORTS_PER_MINUTE,
+  DAILY_REPORT_POINTS_CAP, FLAG_MIN_ACCOUNT_DAYS, ON_SITE_METERS, POINTS_PENDING_DAYS, POINTS_PER_REPORT, REFRESH_SAME_ANSWER_DAYS, REPORTS_PER_MINUTE,
   isReportKind, questionsFor, type ReportKind,
 } from '@/lib/report-questions';
 import { pointsSummary, tallyFor } from '@/lib/report-trust';
+import { verifyLocationToken } from '@/lib/places';
 
 // 飼主回報
 // GET  ?placeId=&kind=  → 題目、各題統計與結論、我的回答與我按過的「可能已改變」
@@ -72,6 +73,11 @@ export async function POST(req: Request) {
     if (recent >= REPORTS_PER_MINUTE) return NextResponse.json({ error: '回報太快了，請稍後再試' }, { status: 429 });
 
     if (action === 'flag') {
+      // 註冊未滿 7 天的帳號不能反映，避免開小號洗「可能已改變」
+      const me = await prisma.user.findUnique({ where: { id: userId }, select: { createdAt: true } });
+      if (!me || Date.now() - me.createdAt.getTime() < FLAG_MIN_ACCOUNT_DAYS * DAY) {
+        return NextResponse.json({ error: `註冊滿 ${FLAG_MIN_ACCOUNT_DAYS} 天後才能反映「可能已改變」` }, { status: 403 });
+      }
       await prisma.placeReportFlag.upsert({
         where: { placeId_question_userId: { placeId, question, userId } },
         create: { placeId, question, userId },
@@ -81,19 +87,21 @@ export async function POST(req: Request) {
     }
 
     if (typeof answer !== 'boolean') return NextResponse.json({ error: '參數錯誤' }, { status: 400 });
-    // 現場回報：只比對使用者與店家的距離，不保存任何位置
-    const onSite = isLatLng(body.here) && isLatLng(body.place) && metersBetween(body.here, body.place) <= ON_SITE_METERS;
+    // 現場回報：店家座標必須是本站搜尋時簽發的（防偽造），只比對距離，不保存任何位置
+    const onSite = isLatLng(body.here) && isLatLng(body.place)
+      && verifyLocationToken(placeId, body.place.lat, body.place.lng, body.place.token)
+      && metersBetween(body.here, body.place) <= ON_SITE_METERS;
 
     const result = await prisma.$transaction(async (tx) => {
       // 鎖住這位使用者，讓同時送出的回報排隊計算每日點數，避免超過上限
       await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${userId} FOR UPDATE`;
       const existing = await tx.placeReport.findUnique({ where: { placeId_userId_question: { placeId, userId, question } } });
       if (existing) {
-        if (existing.answer !== answer || (onSite && !existing.onSite)) {
+        if (existing.answer !== answer) {
+          await tx.placeReport.update({ where: { id: existing.id }, data: { answer, onSite } });
+        } else if (Date.now() - existing.updatedAt.getTime() >= REFRESH_SAME_ANSWER_DAYS * DAY) {
+          // 同樣的答案隔 30 天以上再按：更新時間，表示最近仍然如此（避免一直按來延長有效期）
           await tx.placeReport.update({ where: { id: existing.id }, data: { answer, onSite: existing.onSite || onSite } });
-        } else {
-          // 同樣的答案再按一次：只更新時間，表示最近仍然如此
-          await tx.placeReport.update({ where: { id: existing.id }, data: { answer } });
         }
         return { awarded: 0, capped: false };
       }

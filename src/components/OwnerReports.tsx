@@ -24,7 +24,7 @@ export default function OwnerReports({
   placeId: string;
   primaryType?: string | null;
   name: string;
-  place: { lat: number; lng: number };
+  place: { lat: number; lng: number; token?: string }; // token：本站簽發的店家座標憑證
   here: { lat: number; lng: number } | null; // 使用者目前位置（只用來判斷是否在店家附近，不會保存）
   onPoints?: (points: number, pending: number) => void;
   onLogin: () => void;
@@ -117,7 +117,7 @@ export default function OwnerReports({
                   <div className="text-[10px] text-[#8C7A6B]">
                     {total === 0
                       ? '近 12 個月還沒有人回報'
-                      : `是 ${t.yes}・否 ${t.no}${t.onSite ? `（${t.onSite} 人現場回報）` : ''}${t.lastAt ? `・最近 ${monthText(t.lastAt)}` : ''}${t.verdict === 'insufficient' ? `・回報未滿 ${MIN_REPORTS_FOR_CONCLUSION} 人` : ''}`}
+                      : `是 ${t.yes}・否 ${t.no}${t.onSite ? `（${t.onSite} 人現場回報）` : ''}${t.lastAt ? `・最近 ${monthText(t.lastAt)}` : ''}${t.verdict === 'insufficient' ? `・累積中 ${total}/${MIN_REPORTS_FOR_CONCLUSION}` : ''}`}
                   </div>
                   {t.flagged && <div className="text-[10px] font-bold text-[#C0705A]">近期有飼主反映可能已改變，歡迎重新回報</div>}
                   {total > 0 && (

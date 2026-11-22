@@ -3,9 +3,10 @@
 // - 只統計近 12 個月的回報
 // - 每票有權重：新帳號（註冊未滿 7 天）或回報常被多數推翻的人權重較低；現場回報權重較高
 // - 至少 3 人回報才給結論；加權後一方占 2/3 以上才算「多數」，否則「意見分歧」
-// - 點數先「確認中」，7 天後若沒被多數推翻才入帳
+// - 點數先「確認中」，7 天後結算：只要相反答案沒有形成多數（2/3），就入帳；
+//   回報人數不足或意見分歧都算入帳，避免冷門店家的回報者永遠拿不到點
 import type { Prisma, PrismaClient } from '@prisma/client';
-import { FLAG_WINDOW_DAYS, FLAGS_TO_WARN, MIN_REPORTS_FOR_CONCLUSION, REPORT_WINDOW_DAYS } from '@/lib/report-questions';
+import { FLAG_WINDOW_DAYS, FLAGS_TO_WARN, MIN_REPORTS_FOR_CONCLUSION, ON_SITE_WEIGHT, REPORT_WINDOW_DAYS, SETTLE_BATCH } from '@/lib/report-questions';
 
 type Db = PrismaClient | Prisma.TransactionClient;
 const DAY = 86_400_000;
@@ -30,12 +31,18 @@ async function voterWeights(db: Db, userIds: string[]): Promise<Map<string, numb
   const out = new Map<string, number>();
   if (!userIds.length) return out;
   const users = await db.user.findMany({ where: { id: { in: userIds } }, select: { id: true, createdAt: true } });
-  const voids = await db.pointLedger.groupBy({ by: ['userId'], where: { userId: { in: userIds }, reason: 'report', status: 'void' }, _count: { _all: true } });
-  const voidCount = new Map(voids.map(v => [v.userId, v._count._all]));
+  // 近 90 天的結算結果：被推翻 3 筆以上、且占 30% 以上才降權（給好人復原的機會）
+  const recent = await db.pointLedger.groupBy({
+    by: ['userId', 'status'],
+    where: { userId: { in: userIds }, reason: 'report', status: { in: ['granted', 'void'] }, createdAt: { gte: new Date(Date.now() - 90 * DAY) } },
+    _count: { _all: true },
+  });
   for (const u of users) {
     let w = 1;
     if (Date.now() - u.createdAt.getTime() < 7 * DAY) w = 0.5; // 新帳號
-    if ((voidCount.get(u.id) ?? 0) >= 3) w = 0.3; // 常被多數推翻
+    const voids = recent.find(r => r.userId === u.id && r.status === 'void')?._count._all ?? 0;
+    const granted = recent.find(r => r.userId === u.id && r.status === 'granted')?._count._all ?? 0;
+    if (voids >= 3 && voids / (voids + granted) > 0.3) w = 0.3; // 近期常被多數推翻
     out.set(u.id, w);
   }
   return out;
@@ -60,7 +67,7 @@ export async function tallyFor(db: Db, placeId: string, keys: string[]): Promise
     const rs = rows.filter(r => r.question === k);
     let wYes = 0, wNo = 0, lastAt: string | null = null;
     for (const r of rs) {
-      const w = (weights.get(r.userId) ?? 1) * (r.onSite ? 1.5 : 1);
+      const w = (weights.get(r.userId) ?? 1) * (r.onSite ? ON_SITE_WEIGHT : 1);
       if (r.answer) wYes += w; else wNo += w;
       const at = r.updatedAt.toISOString();
       if (!lastAt || at > lastAt) lastAt = at;
@@ -82,6 +89,8 @@ export async function settlePendingPoints(db: PrismaClient, userId: string): Pro
   const due = await db.pointLedger.findMany({
     where: { userId, status: 'pending', availableAt: { lte: new Date() } },
     select: { id: true, amount: true, refId: true },
+    orderBy: { createdAt: 'asc' },
+    take: SETTLE_BATCH, // 一次最多結算幾筆，避免一次太多拖慢回應
   });
   for (const e of due) {
     const report = e.refId ? await db.placeReport.findUnique({ where: { id: e.refId } }) : null;

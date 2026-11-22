@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { searchPlaces, photoProxyUrl, detailsToken, PlacesApiError } from '@/lib/places';
+import { searchPlaces, photoProxyUrl, detailsToken, locationToken, PlacesApiError } from '@/lib/places';
 import { isServiceCategory, shouldExclude } from '@/lib/service-categories';
 
 export const dynamic = 'force-dynamic';
@@ -52,6 +52,8 @@ export async function GET(req: Request) {
       photoAttributions: p.photoAttributions,
       // 點開店家時向 /api/place-details 出示的憑證
       detailsToken: detailsToken(p.id),
+      // 現場回報用：店家座標的簽章
+      locToken: locationToken(p.id, p.lat, p.lng),
     }));
 
     return NextResponse.json({ results, relaxed });

@@ -334,3 +334,22 @@ export function verifyDetailsToken(placeId: string, token: string | null): boole
   const given = Buffer.from(sig);
   return expected.length === given.length && timingSafeEqual(expected, given);
 }
+
+// ---- 店家座標憑證（給「現場回報」用）----
+// 前端送來的店家座標要有本站搜尋時簽發的憑證，避免有人自己填店家座標假裝在現場。
+const fixed = (n: number) => n.toFixed(6);
+export function locationToken(placeId: string, lat: number, lng: number): string {
+  const exp = Math.floor(Date.now() / 1000) + PHOTO_URL_TTL_SECONDS;
+  return `${exp}.${signPhoto(`loc:${placeId}:${fixed(lat)},${fixed(lng)}`, exp)}`;
+}
+
+export function verifyLocationToken(placeId: string, lat: number, lng: number, token: unknown): boolean {
+  if (typeof token !== 'string' || !Number.isFinite(lat) || !Number.isFinite(lng)) return false;
+  const [exp, sig] = token.split('.');
+  if (!exp || !sig || !/^\d+$/.test(exp)) return false;
+  const expNum = Number(exp);
+  if (expNum < Math.floor(Date.now() / 1000)) return false;
+  const expected = Buffer.from(signPhoto(`loc:${placeId}:${fixed(lat)},${fixed(lng)}`, expNum));
+  const given = Buffer.from(sig);
+  return expected.length === given.length && timingSafeEqual(expected, given);
+}
