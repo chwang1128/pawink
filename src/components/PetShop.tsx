@@ -24,8 +24,9 @@ const uuid = (): string => (typeof crypto !== 'undefined' && 'randomUUID' in cry
 
 const C = { bg: '#FFFDF9', sand: '#F7F2EA', line: '#E8DFD8', gold: '#B88746', green: '#4D8B6F', ink: '#38312D', sub: '#6E5A4D' };
 
-export default function PetShop({ open, onClose, onLogin, onBought }: {
+export default function PetShop({ open, onClose, onLogin, onBought, initialTab }: {
   open: boolean;
+  initialTab?: Tab;
   onClose: () => void;
   onLogin: () => void;
   onBought: (points: number, pending: number) => void; // 買完更新右上的點數、工具列的背包
@@ -43,10 +44,11 @@ export default function PetShop({ open, onClose, onLogin, onBought }: {
 
   useEffect(() => {
     if (!open) return;
+    if (initialTab) setTab(initialTab);
     setFailed(false);
     fetch('/api/vpet').then(r => (r.ok ? r.json() : Promise.reject())).then(setState).catch(() => setFailed(true));
     closeBtn.current?.focus();
-  }, [open]);
+  }, [open, initialTab]);
   useEffect(() => {
     if (!open) return;
     const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') (pick ? setPick(null) : onClose()); };
@@ -140,7 +142,7 @@ export default function PetShop({ open, onClose, onLogin, onBought }: {
         <div className="flex-1 overflow-y-auto px-4 md:px-6 py-3">
           {tab === 'wear' && (
             <p className="mb-3 rounded-2xl px-3 py-2 text-xs font-bold leading-relaxed" style={{ background: C.sand, color: C.sub }}>
-              穿搭買了會先收進衣櫃 地圖上的毛孩還穿不上去 這個功能準備中
+              買了到左邊工具列的「服裝」幫牠穿上 同一個部位一次穿一件
             </p>
           )}
           {failed && <p className="py-10 text-center text-sm font-bold" style={{ color: C.sub }}>商店暫時打不開 等一下再試</p>}
@@ -204,7 +206,7 @@ export default function PetShop({ open, onClose, onLogin, onBought }: {
                 </span>
                 <div>
                   <p className="font-black text-base">{pick.name}</p>
-                  <p className="text-xs font-bold" style={{ color: C.sub }}>{pick.consumable ? pick.desc : pick.category === 'wear' ? '永久擁有 先收進衣櫃' : '永久擁有'}</p>
+                  <p className="text-xs font-bold" style={{ color: C.sub }}>{pick.consumable ? pick.desc : pick.category === 'wear' ? '永久擁有 到「服裝」穿上' : '永久擁有'}</p>
                 </div>
               </div>
               {pick.consumable && (
