@@ -26,6 +26,9 @@ const VISIT_MIN_AWAY_MS = 15 * 60_000; // 離開不到 15 分鐘就回來，多�
 const VISIT_MAX_AGE_MS = 7 * 86_400_000; // 超過 7 天就不問了
 const ASK_AGAIN_MS = 30 * 86_400_000; // 同一家店 30 天內只問一次
 
+// 從地址取出行政區，例如「106臺北市大安區仁慈里…」→「大安區」
+const districtOf = (address: string | null | undefined) => (address || '').match(/[市縣]([^市縣\d]{1,3}?[區鄉鎮市])/)?.[1] ?? '';
+
 function readJson<T>(key: string): T | null {
   try { const v = window.localStorage.getItem(key); return v ? (JSON.parse(v) as T) : null; } catch { return null; }
 }
@@ -309,7 +312,8 @@ export default function FullMapAIPortal() {
   // grounding：AI 查證結果（Google 地圖／網路）。這類訊息只顯示，不送回給我們的 AI 當對話紀錄，
   // 避免把 Google 地圖內容拿去產生新內容（Google Maps Platform 條款 3.2.3(c)）
   const [messages, setMessages] = useState<Array<{ sender: 'ai' | 'user'; text: string; grounding?: GroundingResult | 'loading'; gid?: number }>>([
-    { sender: 'ai', text: `嗨！我是 Pawink 毛孩助理 🐾 想幫【${petProfile.name}】找什麼？可以直接說，例如「附近的動物醫院」「下週出國要寄宿」，也可以問照顧上的問題。` }
+    // 開場只留一句，加上一排範例，小對話框不用捲動就看得完
+    { sender: 'ai', text: `想幫 ${petProfile.name} 找什麼？` }
   ]);
   
   const [inputQuery, setInputQuery] = useState('');
@@ -1216,7 +1220,7 @@ export default function FullMapAIPortal() {
       {/* 💻 電腦與手機共用對話視窗 */}
       {!isAiBoxMinimized && (
         <div className={`flex absolute bottom-[var(--kb,0px)] md:bottom-6 md:right-6 w-full ${isAiCompact ? 'md:w-[300px] lg:w-[320px]' : 'md:w-[340px] lg:w-[400px]'} z-[70] flex-col pointer-events-none animate-in slide-in-from-bottom-10`}>
-          <div className={`bg-[#FFFDF9]/95 backdrop-blur-3xl rounded-t-[32px] md:rounded-[28px] shadow-[0_-20px_48px_rgba(56,49,45,0.12)] p-5 ${isAiCompact ? 'md:p-4' : 'md:p-6'} flex flex-col h-[55vh] h-[55dvh] max-h-[calc(var(--vvh,100dvh)-16px)] ${isAiCompact ? 'md:h-[300px]' : 'md:h-[560px]'} md:max-h-[calc(100dvh-184px)] ring-1 ring-[#E8DFD8] pointer-events-auto relative overflow-hidden transition-[height] duration-300`}>
+          <div className={`bg-[#FFFDF9]/95 backdrop-blur-3xl rounded-t-[32px] md:rounded-[28px] shadow-[0_-20px_48px_rgba(56,49,45,0.12)] p-5 ${isAiCompact ? 'md:p-4' : 'md:p-6'} flex flex-col h-[55vh] h-[55dvh] max-h-[calc(var(--vvh,100dvh)-16px)] ${isAiCompact ? 'md:h-[306px]' : 'md:h-[560px]'} md:max-h-[calc(100dvh-184px)] ring-1 ring-[#E8DFD8] pointer-events-auto relative overflow-hidden transition-[height] duration-300`}>
             <div className="absolute top-0 left-0 right-0 h-40 bg-gradient-to-b from-[#B88746]/10 to-transparent pointer-events-none"></div>
             
             <div className="w-full flex justify-center pb-3 md:hidden" onClick={() => { setIsAiBoxMinimized(true); setHasOpenedAi(true); }}>
@@ -1262,13 +1266,13 @@ export default function FullMapAIPortal() {
               ))}
               {/* 剛打開時給幾個範例問題，點了就直接送出 */}
               {messages.length === 1 && !isAiTyping && (
-                <div className="flex flex-wrap gap-2 pl-1">
-                  {['附近的動物醫院', '下週出國，要找寄宿', '附近可以帶狗的餐廳', '狗可以吃葡萄嗎？'].map(q => (
+                <div className="flex flex-wrap gap-1.5 pl-1">
+                  {['附近動物醫院', '找寄宿', '寵物友善餐廳'].map(q => (
                     <button
                       key={q}
                       type="button"
                       onClick={() => handleSendMessage(q)}
-                      className="text-xs font-bold text-[#8A6A3E] bg-[#F7F2EA] hover:bg-[#EFE5D8] ring-1 ring-[#E8DFD8] rounded-full px-3 py-2 active:scale-95"
+                      className="text-[11px] font-bold text-[#8A6A3E] bg-[#F7F2EA] hover:bg-[#EFE5D8] ring-1 ring-[#E8DFD8] rounded-full px-2.5 py-1.5 whitespace-nowrap active:scale-95"
                     >
                       {q}
                     </button>
@@ -1439,10 +1443,10 @@ export default function FullMapAIPortal() {
               <li
                 key={store.id}
                 data-slot={index + 1}
-                className="card-enter relative w-[78vw] max-w-[320px] md:w-full md:max-w-none h-[104px] md:h-[96px] shrink-0 snap-center bg-[#FFFDF9]/92 backdrop-blur-2xl rounded-[22px] shadow-[0_12px_28px_rgba(184,135,70,0.12)] ring-1 ring-[#E8DFD8] overflow-hidden flex transition-transform hover:-translate-y-0.5 focus-within:ring-2 focus-within:ring-[#B88746]"
+                className="card-enter relative w-[78vw] max-w-[320px] md:w-full md:max-w-none h-[80px] md:h-[72px] shrink-0 snap-center bg-[#FFFDF9]/92 backdrop-blur-2xl rounded-[22px] shadow-[0_12px_28px_rgba(184,135,70,0.12)] ring-1 ring-[#E8DFD8] overflow-hidden flex transition-transform hover:-translate-y-0.5 focus-within:ring-2 focus-within:ring-[#B88746]"
                 style={{ animationDelay: `${index * 0.08}s` }}
               >
-                <div className="relative w-[96px] h-full shrink-0">
+                <div className="relative w-[80px] h-full shrink-0">
                   <img src={store.photoUrl} alt="" className="w-full h-full object-cover" />
                   {store.photoAttributions.length > 0 && (
                     <span className="absolute top-1 left-1 right-1 z-10 text-[8px] leading-tight text-white/90 truncate drop-shadow">
@@ -1467,18 +1471,19 @@ export default function FullMapAIPortal() {
                     </button>
                   </h3>
                   <div className="flex items-center mt-1.5 space-x-2 text-[11px] font-bold">
-                    <span className="text-[#4D8B6F] flex items-center">
+                    <span className="text-[#4D8B6F] flex items-center shrink-0">
                       <Navigation className="w-3 h-3 mr-0.5" aria-hidden="true" />
                       <span className="sr-only">距離</span>{store.distanceText}
                     </span>
                     {store.rating !== null && (
-                      <span className="text-[#38312D] flex items-center" aria-label={`Google 評分 ${store.rating} 顆星`}>
+                      <span className="text-[#38312D] flex items-center shrink-0" aria-label={`Google 評分 ${store.rating} 顆星`}>
                         <Star className="w-3 h-3 text-amber-500 fill-current mr-0.5" aria-hidden="true" />
                         <span aria-hidden="true">{store.rating}</span>
                       </span>
                     )}
+                    {/* 只留行政區，連鎖店才分得出是哪一家；完整地址在店家詳情 */}
+                    {districtOf(store.address) && <span className="text-[#A67C52] font-medium truncate">{districtOf(store.address)}</span>}
                   </div>
-                  <p className="text-[11px] text-[#A67C52] truncate mt-1">{store.address}</p>
                 </div>
               </li>
             ))}
