@@ -1,10 +1,8 @@
 datasource db {
-  provider  = "postgresql"
-  // Neon（新加坡）：DATABASE_URL 用連線池網址（主機名稱含 -pooler，加 ?sslmode=require&pgbouncer=true&connect_timeout=15）給網站連線，
-  // DIRECT_URL 用直連網址（不含 -pooler）給建表與搬資料使用。
-  // connect_timeout 讓資料庫休眠後醒來的第一次連線有足夠時間
-  url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
+  provider = "postgresql"
+  // Neon（新加坡）：DATABASE_URL 用 Neon 連線視窗「Prisma」格式的連線池網址（主機名稱含 -pooler）。
+  // Prisma 5.10 以後建表也能走連線池，不需要另外的 directUrl。
+  url      = env("DATABASE_URL")
 }
 
 generator client {

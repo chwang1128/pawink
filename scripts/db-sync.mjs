@@ -4,14 +4,14 @@
 // - Production 部署：執行
 // - Preview 部署：預設不執行，避免 PR 的預覽版改到正式資料庫的結構；
 //   需要時在 Vercel 的 Preview 環境變數設 ALLOW_PREVIEW_DB_SYNC=1（例如資料庫還是空的、第一次建表時）
-// - 未設定 DATABASE_URL 或 DIRECT_URL：略過
+// - 未設定 DATABASE_URL：略過
 //
 // 正式上線、有真實資料後，應改用 prisma migrate（遷移檔）以保留變更紀錄，並讓 Preview 使用獨立的資料庫。
 import { execSync } from 'node:child_process';
 
 const env = process.env.VERCEL_ENV; // production | preview | development | undefined（本機）
-if (!process.env.DATABASE_URL || !process.env.DIRECT_URL) {
-  console.log('[db-sync] 未設定 DATABASE_URL 或 DIRECT_URL，略過');
+if (!process.env.DATABASE_URL) {
+  console.log('[db-sync] 未設定 DATABASE_URL，略過');
   process.exit(0);
 }
 if (env === 'preview' && process.env.ALLOW_PREVIEW_DB_SYNC !== '1') {
