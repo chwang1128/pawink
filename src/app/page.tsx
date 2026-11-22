@@ -1,5 +1,5 @@
 'use client';
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { useSession, signIn, signOut } from 'next-auth/react';
 import { 
   Quote, Sparkles, Send, MapPin, 
@@ -327,8 +327,8 @@ export default function FullMapAIPortal() {
   const [displayedStores, setDisplayedStores] = useState<Store[]>([]);
   const cardIds = displayedStores.map(st => st.id).join(',');
   const firstCardIds = useRef('');
-  useEffect(() => {
-    // 只有換了一批店家才捲回去；在列表裡刪掉一張不用
+  useLayoutEffect(() => {
+    // 只有換了一批店家才捲回去；在列表裡刪掉一張不用（畫面畫出來前就捲回，不會閃一下）
     const prev = firstCardIds.current.split(',');
     const now = cardIds.split(',');
     firstCardIds.current = cardIds;
