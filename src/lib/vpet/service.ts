@@ -3,7 +3,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { pointsSummary } from '@/lib/report-trust';
 import {
-  ITEM_BY_SKU, STARTER_SKUS, FREE_FEED_PER_DAY, FREE_FEED_EFFECT, PET_EFFECT, BATH_EFFECT, COOLDOWN_MIN,
+  ITEM_BY_SKU, STARTER_SKUS, FREE_FEED_PER_DAY, FREE_FEED_EFFECT, PET_EFFECT, COOLDOWN_MIN,
   ACTIONS_PER_MINUTE, DAILY_XP_CAP, CHECKIN_POINTS, STREAK_BONUS, WEEKLY_LOGIN_POINTS, DAILY_CARE_POINTS, headKeyFor,
   levelOf, xpForLevel, type Effect, type Slot, SLOTS,
 } from '@/lib/vpet/catalog';
@@ -150,9 +150,8 @@ export async function doAction(userId: string, vpetId: string, action: ActionKin
       effect = PET_EFFECT;
       patch.lastPetAt = now;
     } else if (action === 'bath') {
-      if (cd(v.lastBathAt, COOLDOWN_MIN.bath)) throw new VpetError('今天已經洗過澡了');
-      effect = BATH_EFFECT;
-      patch.lastBathAt = now;
+      // 洗澡要用泡泡沐浴球（action: 'use', sku: 'bubble_bath'），不再有免費洗澡
+      throw new VpetError('洗澡要用泡泡沐浴球，可以到商店買');
     } else {
       throw new VpetError('不支援的動作', 400);
     }

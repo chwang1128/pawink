@@ -25,7 +25,7 @@ export const ITEMS: Item[] = [
   { sku: 'can_food', name: '罐罐', category: 'food', price: 8, consumable: true, effect: { fullness: 40, mood: 10, xp: 6 }, icon: '🥫', desc: '飽足 +40、心情 +10' },
   { sku: 'jerky', name: '肉乾零食', category: 'treat', price: 10, consumable: true, effect: { fullness: 10, mood: 15, xp: 6 }, icon: '🍖', desc: '心情 +15，親密度加比較多' },
   { sku: 'catnip', name: '貓草', category: 'treat', price: 10, consumable: true, species: 'cat', effect: { mood: 25, xp: 6 }, icon: '🌿', desc: '貓咪專用，心情 +25' },
-  { sku: 'bubble_bath', name: '泡泡沐浴球', category: 'care', price: 12, consumable: true, effect: { cleanliness: 100, mood: 5, xp: 5, sparkleHours: 24 }, icon: '🫧', desc: '洗得香香的，閃亮 24 小時' },
+  { sku: 'bubble_bath', name: '泡泡沐浴球', category: 'care', price: 12, consumable: true, effect: { cleanliness: 100, mood: 5, xp: 5, sparkleHours: 24 }, icon: '🫧', desc: '洗澡要用，洗完香香的閃亮 24 小時' },
   // 玩具（不消耗）
   { sku: 'ball', name: '小皮球', category: 'toy', price: 0, consumable: false, effect: { mood: 20, xp: 5 }, icon: '⚽', desc: '開局附贈' },
   { sku: 'rope', name: '拔河繩', category: 'toy', price: 50, consumable: false, effect: { mood: 25, xp: 6 }, icon: '🪢', desc: '心情 +25' },
@@ -52,7 +52,6 @@ export const DECAY_PER_HOUR = { fullness: 1.5, cleanliness: 0.5, mood: 1 }; // �
 export const FREE_FEED_PER_DAY = 2; // 每天免費基礎飼料（每隻）：剛好抵掉一天的飢餓，想讓牠吃飽飽就要買罐罐
 export const FREE_FEED_EFFECT: Effect = { fullness: 20, xp: 2 };
 export const PET_EFFECT: Effect = { mood: 5, xp: 2 }; // 摸摸
-export const BATH_EFFECT: Effect = { cleanliness: 100, xp: 5 }; // 免費洗澡
 export const COOLDOWN_MIN = { pet: 10, play: 30, bath: 12 * 60 };
 export const DAILY_XP_CAP = 60; // 每隻每天最多加多少親密度經驗
 export const ACTIONS_PER_MINUTE = 30;

@@ -203,8 +203,8 @@ export default function PetPage() {
         <button type="button" className={btn} style={{ background: '#fff' }} disabled={busy || pet.memorial || pet.cooldown.play > 0} onClick={() => setPick(pick === 'play' ? null : 'play')}>
           <span className="text-xl" aria-hidden="true">🎾</span>玩耍<span className="text-[10px] font-bold" style={{ color: C.sub }}>{pet.cooldown.play ? `${pet.cooldown.play} 分後` : '選玩具'}</span>
         </button>
-        <button type="button" className={btn} style={{ background: '#fff' }} disabled={busy || pet.memorial || pet.cooldown.bath > 0} onClick={() => act('bath')}>
-          <span className="text-xl" aria-hidden="true">🛁</span>洗澡<span className="text-[10px] font-bold" style={{ color: C.sub }}>{pet.cooldown.bath ? `${Math.ceil(pet.cooldown.bath / 60)} 小時後` : '免費'}</span>
+        <button type="button" className={btn} style={{ background: '#fff' }} disabled={busy || pet.memorial || !(inv.bubble_bath > 0)} onClick={() => act('use', 'bubble_bath')}>
+          <span className="text-xl" aria-hidden="true">🛁</span>洗澡<span className="text-[10px] font-bold" style={{ color: C.sub }}>{inv.bubble_bath > 0 ? `泡泡剩 ${inv.bubble_bath}` : '要先買泡泡'}</span>
         </button>
         <button type="button" className={btn} style={{ background: '#fff' }} disabled={busy || pet.memorial} onClick={() => setPick(pick === 'use' ? null : 'use')}>
           <span className="text-xl" aria-hidden="true">🍖</span>道具<span className="text-[10px] font-bold" style={{ color: C.sub }}>{usables.length ? `${usables.length} 種` : '沒有'}</span>

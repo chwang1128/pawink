@@ -18,7 +18,7 @@ interface VPet { id: string; name: string; species: 'dog' | 'cat'; stats: Stats;
 interface Snap { loggedIn: boolean; pets?: VPet[]; inventory?: Record<string, number>; points?: number; pending?: number }
 
 type ItemKind = 'food' | 'toy' | 'bath';
-interface TrayItem { key: string; sku?: string; label: string; img: string; kind: ItemKind; disabled?: string }
+interface TrayItem { key: string; sku?: string; label: string; img: string; kind: ItemKind; disabled?: string; toShop?: boolean }
 interface Drop { id: number; item: TrayItem; x: number; done?: boolean }
 interface Particle { id: number; x: number; y: number; text: string; cls?: string }
 
@@ -286,6 +286,7 @@ export default function PetCompanion({
     if (busyRef.current) return;
     if (out !== 'home') { tell(`${name} 出門散步了，先按「喚回」`); return; }
     if (asleepRef.current) await wake();
+    if (item.toShop) { tell(item.disabled || '到商店買'); onShop(); return; }
     if (item.disabled) { tell(item.disabled); await act('tilt', 900); return; }
     if (memorial && item.kind !== 'bath') { tell('紀念模式下不用餵食'); return; }
     lastInteract.current = Date.now();
@@ -295,7 +296,6 @@ export default function PetCompanion({
 
     // 先送出（未登入直接成功），走過去的同時等結果
     const body = !pet ? null
-      : item.kind === 'bath' && !item.sku ? { op: 'action', vpetId: pet.id, action: 'bath' }
       : item.key === 'bowl' ? { op: 'action', vpetId: pet.id, action: 'feed' }
       : item.kind === 'toy' ? (pet.cooldown.play === 0 ? { op: 'action', vpetId: pet.id, action: 'play', sku: item.sku } : null)
       : { op: 'action', vpetId: pet.id, action: 'use', sku: item.sku };
@@ -472,9 +472,9 @@ export default function PetCompanion({
   for (const sku of TOYS) {
     if (!loggedIn ? sku === 'ball' : (inv[sku] ?? 0) > 0) tray.push({ key: sku, sku, label: sku === 'ball' ? '皮球' : sku === 'rope' ? '拔河繩' : '骨頭', img: PROP[sku], kind: 'toy' });
   }
-  const bathCd = loggedIn ? (pet?.cooldown.bath ?? 0) : 0;
-  if (loggedIn && (inv.bubble_bath ?? 0) > 0) tray.push({ key: 'bubble_bath', sku: 'bubble_bath', label: `泡泡 ${inv.bubble_bath}`, img: PROP.bubble_bath, kind: 'bath' });
-  tray.push({ key: 'bath', label: '洗澡', img: PROP.bubble_bath, kind: 'bath', disabled: bathCd > 0 ? `今天洗過了，${Math.ceil(bathCd / 60)} 小時後再洗` : undefined });
+  // 洗澡＝用泡泡沐浴球，沒有泡泡就點一下去商店買
+  const bubbles = loggedIn ? inv.bubble_bath ?? 0 : 1;
+  tray.push({ key: 'bubble_bath', sku: 'bubble_bath', label: loggedIn ? `洗澡 ${bubbles}` : '洗澡', img: PROP.bubble_bath, kind: 'bath', disabled: bubbles > 0 ? undefined : '泡泡用完了，到商店買', toShop: bubbles === 0 });
 
   if (hidden || (!desktop && chatOpen)) return null;
 
