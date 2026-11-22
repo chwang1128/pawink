@@ -1,9 +1,8 @@
 datasource db {
-  provider  = "postgresql"
-  // Supabase：DATABASE_URL 用 Transaction pooler（port 6543，加 ?pgbouncer=true）給網站連線，
-  // DIRECT_URL 用 Session pooler（port 5432）給資料表遷移使用
-  url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
+  provider = "postgresql"
+  // Neon（新加坡）：DATABASE_URL 用 Neon 連線視窗「Prisma」格式的連線池網址（主機名稱含 -pooler）。
+  // Prisma 5.10 以後建表也能走連線池，不需要另外的 directUrl。
+  url      = env("DATABASE_URL")
 }
 
 generator client {
