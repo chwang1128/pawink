@@ -36,9 +36,9 @@ const PROP: Record<string, string> = {
 const TOYS = ['ball', 'rope', 'plush_bone'];
 const SPEED = 110; // 走路速度 px/秒
 const MIN_KEY = 'pawink_pet_min';
-// 多久沒理牠會睡著：白天 90 秒，晚上（台灣時間 22:00–07:00）20 秒
+// 多久沒理牠會睡著：白天 90 秒，晚上（台灣時間 22:00–07:00）50 秒
 const SLEEP_AFTER_MS = 90_000;
-const SLEEP_AFTER_NIGHT_MS = 20_000;
+const SLEEP_AFTER_NIGHT_MS = 50_000;
 const isNightTW = () => { const h = new Date(Date.now() + 8 * 3_600_000).getUTCHours(); return h >= 22 || h < 7; };
 
 function useIsDesktop() {
@@ -54,7 +54,7 @@ function useIsDesktop() {
 }
 
 export default function PetCompanion({
-  loggedIn, guestName, hidden, hasCarousel, hasFeatured, chatOpen, onPoints, onLogin, getMap, stores, walkHome,
+  loggedIn, guestName, hidden, hasCarousel, hasFeatured, chatOpen, chatWide, onPoints, onLogin, getMap, stores, walkHome,
 }: {
   loggedIn: boolean;
   guestName: string;
@@ -62,6 +62,7 @@ export default function PetCompanion({
   hasCarousel: boolean; // 下方有店家卡片列
   hasFeatured: boolean; // 左下有推薦店家面板
   chatOpen: boolean; // AI 對話框開著（手機會蓋住下半部）
+  chatWide: boolean; // 桌機對話框是大的（小的寬 300–320）
   onPoints?: (points: number, pending: number) => void;
   onLogin: () => void;
   getMap: () => any; // Google 地圖物件（還沒載入時為 null）
@@ -79,7 +80,8 @@ export default function PetCompanion({
   const bottom = desktop ? (hasCarousel ? 220 : 16) : (hasCarousel ? 196 : hasFeatured ? 214 : 16);
   const left = desktop ? (hasFeatured && !hasCarousel ? (wide ? 380 : 320) : 24) : 10;
   // 桌機右側 AI 對話框開著時，中間放不下就先縮成頭像（點開時蓋在最上層）
-  const room = desktop ? (chatOpen ? vw - 24 - (wide ? 400 : 340) - 16 : vw - 24) - left : vw;
+  const chatW = chatWide ? (wide ? 400 : 340) : (wide ? 320 : 300);
+  const room = desktop ? (chatOpen ? vw - 24 - chatW - 16 : vw - 24) - left : vw;
   const cramped = desktop && room < W;
   const [forceOpen, setForceOpen] = useState(false);
 
@@ -409,19 +411,19 @@ export default function PetCompanion({
     const t = window.setInterval(() => {
       if (asleepRef.current || out !== 'home' || busyRef.current || dragging.current || Date.now() - lastInteract.current < 4000) return;
       if (memorial) { if (Math.random() < 0.3) act('sit', 3000); return; }
-      if (hungry) { act(Math.random() < 0.5 ? 'beg' : 'hungry', 2200); return; }
+      // 狀態優先：餓（趴著）＞ 髒（抓耳朵＋灰塵）＞ 寂寞（坐著歪頭）＞ 平常
+      // 抓耳朵、歪頭只在髒、寂寞時出現，飼主一看就知道要做什麼
+      if (hungry) return; // 待機就是趴著
       const roll = Math.random();
-      if (dirty && roll < 0.5) { act('scratch', 1600); return; }
-      if (lonely && roll < 0.5) { act(Math.random() < 0.5 ? 'tilt' : 'sit', 2600); return; }
-      if (roll < 0.35) walkTo(60 + Math.random() * (W - 120));
-      else if (roll < 0.5) act('sniff', 1800);
-      else if (roll < 0.62) act('sit', 2600);
-      else if (roll < 0.74) act('tilt', 1600);
-      else if (roll < 0.82) act('scratch', 1400);
+      if (dirty && roll < 0.6) { burst(xRef.current, H - PET_H * 0.7, '💨', 2, 'text-sm opacity-70'); act('scratch', 1600); return; }
+      if (lonely && roll < 0.6) { act(Math.random() < 0.5 ? 'tilt' : 'sit', 2600); return; }
+      if (roll < 0.4) walkTo(60 + Math.random() * (W - 120));
+      else if (roll < 0.6) act('sniff', 1800);
+      else if (roll < 0.8) act('sit', 2600);
       else setHop(h => h + 1);
     }, 6000);
     return () => window.clearInterval(t);
-  }, [minimized, hidden, hungry, dirty, lonely, memorial, W, walkTo, act, out]);
+  }, [minimized, hidden, hungry, dirty, lonely, memorial, W, H, PET_H, walkTo, act, burst, out]);
 
   // ---- 托盤 ----
   const inv = snap?.inventory ?? {};

@@ -141,7 +141,7 @@ export function createWalker(opts: {
         await wait(2800);
       } else {
         const r = Math.random();
-        setPose(r < 0.3 ? 'eat' : r < 0.5 ? 'sit' : r < 0.65 ? 'tilt' : r < 0.75 ? 'scratch' : 'idle');
+        setPose(r < 0.35 ? 'eat' : r < 0.6 ? 'sit' : 'idle');
         await wait(1500 + Math.random() * 2500);
       }
     }
