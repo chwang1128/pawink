@@ -1209,7 +1209,7 @@ export default function FullMapAIPortal() {
       {showSearchHereBtn && (
         <div className="absolute top-[108px] md:top-24 left-0 right-0 z-20 flex justify-center pointer-events-none animate-in fade-in slide-in-from-top-4">
           <button 
-            onClick={() => searchGooglePlaces(lastKeyword, 'mapCenter', null, null, true)}
+            onClick={() => { setIsAiBoxMinimized(true); searchGooglePlaces(lastKeyword, 'mapCenter', null, null, true); }}
             className="bg-[#38312D]/90 backdrop-blur-xl shadow-[0_12px_24px_rgba(56,49,45,0.2)] rounded-full px-5 py-2.5 md:px-6 md:py-3 flex items-center space-x-2 text-white pointer-events-auto hover:bg-[#2A2320] transition-all active:scale-95"
           >
             <RefreshCcw className="w-4 h-4" />
