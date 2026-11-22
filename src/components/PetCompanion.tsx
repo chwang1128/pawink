@@ -432,14 +432,14 @@ export default function PetCompanion({
       if (hungry) return; // 待機就是趴著
       const roll = Math.random();
       if (dirty && roll < 0.6) { burst(xRef.current, H - PET_H * 0.7, '💨', 2, 'text-sm opacity-70'); act('scratch', 1600); return; }
-      if (lonely && roll < 0.6) { act(Math.random() < 0.5 ? 'tilt' : 'sit', 2600); return; }
+      if (lonely && roll < 0.6) { act(Math.random() < 0.5 ? 'tilt' : 'sit', 1800); return; }
       if (roll < 0.65) {
         // 多半在走：一段一段走，偶爾小跑步
         const to = 60 + Math.random() * (W - 120);
         walkTo(to, Math.random() < 0.25 ? 'run' : 'walk', Math.random() < 0.25 ? 170 : SPEED);
       }
       else if (roll < 0.8) act('sniff', 1600);
-      else if (roll < 0.9) act('sit', 2000);
+      else if (roll < 0.9) act('sit', 1800);
       else setHop(h => h + 1);
     }, 2000); // 沒事時每 2 秒動一次
     return () => window.clearInterval(t);
