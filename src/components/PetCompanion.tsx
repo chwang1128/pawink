@@ -77,13 +77,14 @@ export default function PetCompanion({
   const [vw, setVw] = useState(1280);
   useEffect(() => { const on = () => setVw(window.innerWidth); on(); window.addEventListener('resize', on); return () => window.removeEventListener('resize', on); }, []);
   const wide = vw >= 1024;
-  // 桌機固定在左下角（店家卡片已讓出左邊）；手機避開下方的店家卡片
-  const bottom = desktop ? 16 : (hasCarousel ? 196 : hasFeatured ? 214 : 16);
-  const left = desktop ? 24 : 10;
+  // 桌機：照顧按鈕沿著畫面最左邊直排（標題列下方開始），毛孩站在左下、店家卡片的上方
+  // 手機：照顧按鈕和毛孩放在一起，避開下方的店家卡片
+  const bottom = desktop ? (hasCarousel ? 196 : hasFeatured ? 112 : 16) : (hasCarousel ? 196 : hasFeatured ? 214 : 16);
+  const left = desktop ? 92 : 10;
   // 桌機右側 AI 對話框開著時，中間放不下就先縮成頭像（點開時蓋在最上層）
   const chatW = chatWide ? (wide ? 400 : 340) : (wide ? 320 : 300);
   const room = desktop ? (chatOpen ? vw - 24 - chatW - 16 : vw - 24) - left : vw;
-  const cramped = desktop && room < W + 56; // 56＝左邊飼料欄寬
+  const cramped = desktop && room < W;
   const [forceOpen, setForceOpen] = useState(false);
 
   const [snap, setSnap] = useState<Snap | null>(null);
@@ -502,10 +503,8 @@ export default function PetCompanion({
     </button>
   );
 
-  // 桌機、手機一樣：左邊直排的飼料欄（狀態整合在裡面），毛孩站在右邊
-  return (
-    <div ref={rootRef} className={`absolute ${cramped ? 'z-[75]' : 'z-[15]'} pointer-events-none select-none flex items-end gap-1.5`} style={{ bottom, left: cramped ? Math.max(8, Math.min(left, vw - W - 60)) : left }}>
-      <div className="pointer-events-auto flex flex-col items-center gap-0.5 px-1 py-1 rounded-2xl bg-[#FFFDF9]/90 backdrop-blur ring-1 ring-[#E8DFD8] shadow-sm" role="toolbar" aria-orientation="vertical" aria-label="照顧毛孩：點分類展開，或直接拖到牠旁邊">
+  const column = (
+    <div className="pointer-events-auto flex flex-col items-center gap-0.5 px-1 py-1 rounded-2xl bg-[#FFFDF9]/90 backdrop-blur ring-1 ring-[#E8DFD8] shadow-sm" role="toolbar" aria-orientation="vertical" aria-label="照顧毛孩：點分類展開，或直接拖到牠旁邊">
         <button type="button" onClick={() => toggleMin(true)} aria-label="縮小毛孩" className="text-[#A67C52] text-xs leading-none py-1 w-full">—</button>
         {cats.map(cat => {
           const v = Math.round(Math.max(0, Math.min(100, cat.meter.v)));
@@ -549,6 +548,109 @@ export default function PetCompanion({
           );
         })}
       </div>
+  );
+  const ghost = drag && drag.moved ? (
+    <img src={drag.item.img} alt="" className="fixed z-[200] w-12 h-12 object-contain pointer-events-none -translate-x-1/2 -translate-y-1/2 drop-shadow-lg" style={{ left: drag.x, top: drag.y }} />
+  ) : null;
+
+  // 桌機：照顧按鈕在畫面最左邊（標題列下方），毛孩在左下、店家卡片上方
+  if (desktop) return (
+    <div ref={rootRef} className="contents">
+      <div className="absolute z-[16] pointer-events-none select-none" style={{ top: 92, left: 20 }}>
+        {column}
+      </div>
+      <div className={`absolute ${cramped ? 'z-[75]' : 'z-[15]'} pointer-events-none select-none`} style={{ bottom, left }}>
+        <div style={{ width: W }}>
+        {/* 舞台 */}
+        <div ref={stageRef} className="relative" style={{ height: H }}>
+          <div className="absolute left-2 right-2 bottom-0 h-8 rounded-[50%] bg-[radial-gradient(ellipse_at_center,rgba(255,244,229,.95),rgba(255,244,229,.55)_60%,transparent_72%)]" aria-hidden="true" />
+          {drops.map(d => (
+            <img
+              key={d.id}
+              src={d.done && d.item.key === 'bowl' ? PROP.bowl_empty : d.item.img}
+              alt=""
+              draggable={false}
+              className={`absolute pointer-events-none transition-opacity duration-500 ${d.done && d.item.key !== 'bowl' ? 'opacity-0' : ''} ${d.item.kind === 'toy' ? 'animate-[petball_.7s_ease-in-out_infinite]' : 'animate-[petdrop_.35s_ease-out]'}`}
+              style={d.item.kind === 'bath'
+                ? { left: d.x - PET_H * 0.45, bottom: PET_H * 0.25, width: PET_H * 0.9, opacity: 0.85 }
+                : { left: d.x - PET_H * 0.22, bottom: 6, width: PET_H * 0.44 }}
+            />
+          ))}
+
+          {out !== 'home' ? (
+            <div className="absolute inset-x-0 bottom-3 flex flex-col items-center gap-2 pointer-events-auto">
+              <p className="text-[12px] font-bold text-[#6E5A4D] bg-[#FFFDF9]/90 rounded-full px-3 py-1 shadow-sm">{out === 'returning' ? `${name} 跑回來了…` : `${name} 出門散步了`}</p>
+              <div className="flex gap-2">
+                <button type="button" disabled={out !== 'out'} onClick={callBack} className="px-3 py-2 rounded-xl text-xs font-black text-white bg-[#B88746] shadow active:scale-95 disabled:opacity-50">📣 叫牠回來</button>
+                <button type="button" disabled={out !== 'out'} onClick={() => walker.current?.panTo()} className="px-3 py-2 rounded-xl text-xs font-black text-[#38312D] bg-white ring-1 ring-[#E8DFD8] shadow active:scale-95 disabled:opacity-50">📍 看牠在哪</button>
+              </div>
+            </div>
+          ) : (
+            <button
+              ref={petBtn}
+              type="button"
+              onClick={onPetClick}
+              aria-label={asleep ? `${name} 睡著了，點一下叫醒牠` : `${name}：點頭摸摸，點身體逗牠`}
+              className="absolute bottom-1 pointer-events-auto cursor-pointer focus:outline-none"
+              style={{ left: x - PET_H * 0.6, width: PET_H * 1.2, height: PET_H }}
+            >
+              <div key={`${hop}-${pose}`} className={`w-full h-full ${['petted', 'belly', 'shake', 'stretch'].includes(pose) ? 'animate-[petsquash_.45s_ease-out]' : 'animate-[pethop_.5s_ease-out]'}`} style={{ transformOrigin: '50% 100%' }}>
+                <div className={`relative w-full h-full ${effPose === 'walk' || effPose === 'run' ? 'animate-[petwalk_.32s_ease-in-out_infinite]' : effPose === 'idle' || effPose === 'sit' || effPose === 'sleep' ? 'animate-[petidle_3s_ease-in-out_infinite]' : effPose === 'shake' ? 'animate-[petshake_.18s_linear_infinite]' : ''}`}>
+                  <img
+                    src={SPRITE[effPose]}
+                    alt=""
+                    draggable={false}
+                    className="w-full h-full object-contain object-bottom drop-shadow-[0_6px_6px_rgba(56,49,45,.18)]"
+                    style={{ transform: flip ? 'scaleX(-1)' : undefined, filter: lonely && (effPose === 'idle' || effPose === 'sit') ? 'saturate(.75)' : undefined }}
+                  />
+                  {dirty && effPose !== 'sleep' && (
+                    <>
+                      <span className="absolute left-[34%] top-[58%] w-4 h-3 rounded-full bg-[#7A5A3A]/45 blur-[1px]" aria-hidden="true" />
+                      <span className="absolute left-[55%] top-[70%] w-3 h-2.5 rounded-full bg-[#7A5A3A]/40 blur-[1px]" aria-hidden="true" />
+                      <span className="absolute left-[44%] top-[40%] w-2.5 h-2 rounded-full bg-[#7A5A3A]/35 blur-[1px]" aria-hidden="true" />
+                    </>
+                  )}
+                  {pet?.sparkle && <span className="absolute -top-1 right-2 text-base animate-pulse" aria-hidden="true">✨</span>}
+                  {asleep && [0, 1, 2].map(i => (
+                    <span key={i} className="absolute font-black text-[#8C7A6B] animate-[petzzz_2.4s_ease-out_infinite]" style={{ right: `${22 - i * 6}%`, top: '14%', fontSize: 11 + i * 3, animationDelay: `${i * 0.8}s` }} aria-hidden="true">Z</span>
+                  ))}
+                </div>
+              </div>
+            </button>
+          )}
+          {out === 'home' && showStats > 0 && (
+            <div className="absolute -translate-x-1/2 px-2.5 py-1 rounded-full bg-[#FFFDF9]/95 ring-1 ring-[#E8DFD8] shadow text-[10px] font-bold text-[#6E5A4D] whitespace-nowrap animate-[petdrop_.2s_ease-out] pointer-events-none" style={{ left: Math.min(Math.max(x, 70), W - 70), bottom: PET_H + 4 }} aria-hidden="true">
+              <b className="text-[#38312D]">{name}</b>　飽 {Math.round(stats.fullness)}・潔 {Math.round(stats.cleanliness)}・心 {Math.round(stats.mood)}
+            </div>
+          )}
+          {out === 'home' && !asleep && !busyRef.current && !showStats && (
+            <button type="button" onClick={goWalk} className="absolute right-1 top-1 pointer-events-auto px-2 py-1 rounded-full text-[10px] font-black text-[#4D8B6F] bg-[#FFFDF9]/90 ring-1 ring-[#CFE3D7] shadow-sm active:scale-95">🦮 帶去散步</button>
+          )}
+          {particles.map(p => (
+            <span key={p.id} className={`absolute pointer-events-none -translate-x-1/2 animate-[petfloat_1.3s_ease-out_forwards] ${p.cls || ''}`} style={{ left: p.x, top: p.y }} aria-hidden="true">{p.text}</span>
+          ))}
+        </div>
+
+        {/* 給飼主的提示（不是牠在講話） */}
+        {notice && (
+          <div role="status" aria-live="polite" className="pointer-events-none mt-1 mx-1 px-2.5 py-1 rounded-xl bg-[#38312D]/85 text-white text-[11px] font-bold animate-[petdrop_.25s_ease-out]">{notice}</div>
+        )}
+
+        {!loggedIn && (
+          <button type="button" onClick={onLogin} className="pointer-events-auto mt-1 text-[10px] font-bold text-[#B88746] underline px-2">登入後照顧紀錄會保存，還能賺點數</button>
+        )}
+
+
+      </div>
+      </div>
+      {ghost}
+    </div>
+  );
+
+  // 手機：照顧按鈕和毛孩放在一起
+  return (
+    <div ref={rootRef} className={`absolute z-[15] pointer-events-none select-none flex items-end gap-1.5`} style={{ bottom, left }}>
+      {column}
       <div style={{ width: W }}>
         {/* 舞台 */}
         <div ref={stageRef} className="relative" style={{ height: H }}>
@@ -631,10 +733,7 @@ export default function PetCompanion({
 
 
       </div>
-      {/* 拖曳中的東西 */}
-      {drag && drag.moved && (
-        <img src={drag.item.img} alt="" className="fixed z-[200] w-12 h-12 object-contain pointer-events-none -translate-x-1/2 -translate-y-1/2 drop-shadow-lg" style={{ left: drag.x, top: drag.y }} />
-      )}
+      {ghost}
     </div>
   );
 }
