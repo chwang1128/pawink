@@ -1435,7 +1435,7 @@ export default function FullMapAIPortal() {
             </span>
             <span className="ml-2 bg-[#FFFDF9]/90 rounded-full px-2 py-0.5 ring-1 ring-[#E8DFD8]"><GoogleMapsAttribution /></span>
           </h2>
-          <ul className="flex gap-3 md:gap-2 overflow-x-auto snap-x snap-mandatory touch-pan-x hide-scrollbar px-4 md:px-0 pb-1 md:justify-center">
+          <ul className="flex gap-3 md:gap-2 overflow-x-auto snap-x snap-mandatory touch-pan-x hide-scrollbar px-4 md:px-0 pb-1 md:w-max md:max-w-full md:mx-auto">
             {featuredStores.map((store, index) => (
               <li
                 key={store.id}
