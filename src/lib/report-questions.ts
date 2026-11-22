@@ -7,23 +7,23 @@ export type ReportKind = 'boarding' | 'grooming' | 'vet' | 'dining' | 'lodging' 
 const Q = {
   no_cage: '不關籠',
   staff_overnight: '夜間有人員看顧',
-  photo_updates: '會主動傳照片回報',
+  photo_updates: '住宿期間有回報機制（照片或影片）',
   large_dog: '接受大型犬',
   cat_ok: '接受貓',
   owner_can_watch: '可陪同或看得到美容過程',
-  gentle_handling: '對緊張的毛孩有耐心',
+  by_appointment: '採全預約制',
   night_emergency: '有夜間急診',
-  exotic_ok: '看特殊寵物（兔、鳥、爬蟲等）',
+  exotic_ok: '有看非犬貓（兔、鼠、鳥、爬蟲等）',
   cat_friendly: '有貓專用候診區或診間',
-  fee_explained: '治療前會先說明費用',
+  fee_list: '有提供收費標準或報價',
   indoor_ok: '寵物可進室內',
-  floor_ok: '寵物可落地',
+  floor_ok: '可牽繩落地（不需推車或提袋）',
   pet_menu: '有寵物餐',
   same_room: '可和寵物同房',
-  no_extra_fee: '不另收寵物清潔費',
+  pet_amenities: '提供寵物備品（尿布墊、碗、床等）',
   pets_enter: '寵物可一起進店',
   fresh_food: '有販售寵物鮮食',
-  off_leash: '可以放繩',
+  fenced_area: '有圍欄寵物專區（可放繩）',
   small_dog_area: '有小型犬專區',
   water: '有飲水設施',
   pets_welcome: '歡迎寵物入內',
@@ -32,12 +32,12 @@ type QKey = keyof typeof Q;
 
 const SETS: Record<ReportKind, QKey[]> = {
   boarding: ['no_cage', 'staff_overnight', 'photo_updates', 'large_dog', 'cat_ok'],
-  grooming: ['large_dog', 'cat_ok', 'owner_can_watch', 'gentle_handling'],
-  vet: ['night_emergency', 'exotic_ok', 'cat_friendly', 'fee_explained'],
+  grooming: ['large_dog', 'cat_ok', 'owner_can_watch', 'by_appointment'],
+  vet: ['night_emergency', 'exotic_ok', 'cat_friendly', 'fee_list'],
   dining: ['indoor_ok', 'floor_ok', 'large_dog', 'pet_menu'],
-  lodging: ['same_room', 'large_dog', 'cat_ok', 'no_extra_fee'],
+  lodging: ['same_room', 'large_dog', 'cat_ok', 'pet_amenities'],
   store: ['pets_enter', 'fresh_food'],
-  park: ['off_leash', 'small_dog_area', 'water'],
+  park: ['fenced_area', 'small_dog_area', 'water'],
   general: ['pets_welcome', 'large_dog'],
 };
 
@@ -70,3 +70,5 @@ export function isReportKind(k: unknown): k is ReportKind {
 
 export const POINTS_PER_REPORT = 2;
 export const DAILY_REPORT_POINTS_CAP = 20;
+// 防洗版：每位飼主每分鐘最多送出幾次回報
+export const REPORTS_PER_MINUTE = 15;

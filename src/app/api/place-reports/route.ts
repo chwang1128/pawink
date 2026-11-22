@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getCurrentUserId } from '@/lib/auth';
 import {
-  DAILY_REPORT_POINTS_CAP, POINTS_PER_REPORT, isReportKind, questionsFor, type ReportKind,
+  DAILY_REPORT_POINTS_CAP, POINTS_PER_REPORT, REPORTS_PER_MINUTE, isReportKind, questionsFor, type ReportKind,
 } from '@/lib/report-questions';
 
 // 飼主回報
@@ -66,7 +66,13 @@ export async function POST(req: Request) {
   }
 
   try {
+    // 防洗版：一分鐘內送出太多次就先擋下
+    const recent = await prisma.placeReport.count({ where: { userId, updatedAt: { gte: new Date(Date.now() - 60_000) } } });
+    if (recent >= REPORTS_PER_MINUTE) return NextResponse.json({ error: '回報太快了，請稍後再試' }, { status: 429 });
+
     const result = await prisma.$transaction(async (tx) => {
+      // 鎖住這位使用者，讓同時送出的回報排隊計算每日點數，避免超過上限
+      await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${userId} FOR UPDATE`;
       const existing = await tx.placeReport.findUnique({ where: { placeId_userId_question: { placeId, userId, question } } });
       if (existing) {
         if (existing.answer !== answer) await tx.placeReport.update({ where: { id: existing.id }, data: { answer } });

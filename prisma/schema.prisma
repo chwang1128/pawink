@@ -181,4 +181,5 @@ model PointLedger {
   createdAt DateTime @default(now())
 
   @@index([userId, createdAt])
+  @@unique([userId, reason, refId]) // 同一筆回報只能發一次點數
 }

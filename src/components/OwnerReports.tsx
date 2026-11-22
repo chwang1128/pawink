@@ -111,6 +111,10 @@ export default function OwnerReports({
         </div>
       )}
       {note && <p className="text-[11px] font-bold text-[#4D8B6F] mt-2" role="status">{note}</p>}
+      <p className="mt-2 text-[10px] text-[#8C7A6B]">
+        不確定的題目可以略過不答。店家資訊有誤？
+        <a href="mailto:aipawink@gmail.com?subject=Pawink%20%E9%A3%BC%E4%B8%BB%E5%9B%9E%E5%A0%B1%E8%B3%87%E8%A8%8A%E6%9B%B4%E6%AD%A3" className="underline ml-0.5">告訴我們</a>
+      </p>
       {data && !data.loggedIn && (
         <button type="button" onClick={onLogin} className="mt-2 text-[11px] font-bold text-[#B88746] underline">
           登入後回報（註冊送 100 點）
