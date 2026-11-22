@@ -88,7 +88,8 @@ export default function OwnerReports({
     if (!j) return;
     const site = j.onSite ? '（現場回報）' : '';
     if (!j.loggedIn) { setNote(`已記錄${site}，謝謝分享！`); setAskLogin(true); return; }
-    if (j.awarded > 0) setNote(`謝謝回報${site}！${j.awarded} 點確認中，${POINTS_PENDING_DAYS} 天後入帳`);
+    const treat = j.treat ? '，也送你的毛孩分身一份肉乾零食' : '';
+    if (j.awarded > 0) setNote(`謝謝回報${site}！${j.awarded} 點確認中，${POINTS_PENDING_DAYS} 天後入帳${treat}`);
     else if (j.capped) setNote(`已記錄${site}。今天回報的點數已達 ${DAILY_REPORT_POINTS_CAP} 點上限，明天再領`);
     else setNote(`已更新你的回答${site}`);
   };
