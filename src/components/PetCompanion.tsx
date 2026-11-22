@@ -8,7 +8,7 @@ import type { Walker } from '@/components/petMapWalker';
 // - 把飼料、罐罐、玩具拖到牠旁邊（或點一下），牠會走過去吃或玩；拖食物時會站起來拜拜、拖玩具時會歪頭
 // - 會餓（趴著）、會髒（抓耳朵）、會寂寞（坐著歪頭等你），但不會死
 // - 一陣子沒理牠會睡著，點一下叫醒會伸懶腰
-// - 可以帶去散步：走進地圖，叫牠就跑回來
+// - 一分鐘沒人理會自己出門散步（走進地圖），工具列最下面按「喚回」就跑回來
 // 美術：ChatGPT 生成的盲盒公仔風柴犬（public/pet）。其他品種之後補。
 
 type Pose = 'idle' | 'petted' | 'eat' | 'play' | 'walk' | 'hungry' | 'sleep' | 'stretch'
@@ -34,11 +34,14 @@ const PROP: Record<string, string> = {
   ball: '/pet/props/ball.webp', rope: '/pet/props/rope.webp', plush_bone: '/pet/props/plush_bone.webp', bubble_bath: '/pet/props/bubble_bath.webp',
 };
 const TOYS = ['ball', 'rope', 'plush_bone'];
+const SHOP_ICON = '/pet/shop/icon.webp';
 const SPEED = 110; // 走路速度 px/秒
 const MIN_KEY = 'pawink_pet_min';
 // 多久沒理牠會睡著：白天 90 秒，晚上（台灣時間 22:00–07:00）50 秒
 const SLEEP_AFTER_MS = 90_000;
 const SLEEP_AFTER_NIGHT_MS = 50_000;
+// 白天一分鐘沒人理牠，會自己出門散步（晚上就睡覺）
+const WALK_AFTER_MS = 60_000;
 const isNightTW = () => { const h = new Date(Date.now() + 8 * 3_600_000).getUTCHours(); return h >= 22 || h < 7; };
 
 function useIsDesktop() {
@@ -54,7 +57,7 @@ function useIsDesktop() {
 }
 
 export default function PetCompanion({
-  loggedIn, guestName, hidden, hasCarousel, hasFeatured, chatOpen, chatWide, onPoints, onLogin, getMap, stores, walkHome,
+  loggedIn, guestName, hidden, hasCarousel, hasFeatured, chatOpen, chatWide, onPoints, onLogin, getMap, stores, walkHome, onShop, refreshKey,
 }: {
   loggedIn: boolean;
   guestName: string;
@@ -68,18 +71,21 @@ export default function PetCompanion({
   getMap: () => any; // Google 地圖物件（還沒載入時為 null）
   stores: { lat: number; lng: number; name: string }[]; // 地圖上的店家，散步時會去聞一聞
   walkHome: { lat: number; lng: number } | null; // 散步的中心（使用者位置；沒有就用地圖中心）
+  onShop: () => void; // 打開商店
+  refreshKey?: number; // 在商店買完東西後 +1，重新讀背包
 }) {
   const desktop = useIsDesktop();
-  const W = desktop ? 420 : 180; // 舞台寬：桌機加寬讓牠走得開（舞台透明，只有牠本身可以點）
+  const [vw, setVw] = useState(1280);
+  useEffect(() => { const on = () => setVw(window.innerWidth); on(); window.addEventListener('resize', on); return () => window.removeEventListener('resize', on); }, []);
+  // 手機舞台從最左邊開始，右邊留給 AI 按鈕
+  const W = desktop ? 420 : Math.max(180, Math.min(260, vw - 120)); // 舞台寬：桌機加寬讓牠走得開（舞台透明，只有牠本身可以點）
   const H = desktop ? 128 : 104; // 舞台高
   const PET_H = desktop ? 94 : 76; // 毛孩高度（原 112 / 88，縮小一點）
   // 放在地圖左下角，避開店家卡片列與推薦面板
-  const [vw, setVw] = useState(1280);
-  useEffect(() => { const on = () => setVw(window.innerWidth); on(); window.addEventListener('resize', on); return () => window.removeEventListener('resize', on); }, []);
   const wide = vw >= 1024;
   // 桌機：照顧按鈕沿著畫面最左邊直排（標題列下方開始），毛孩站在左下、店家卡片的上方
-  // 手機：照顧按鈕和毛孩放在一起，避開下方的店家卡片
-  const bottom = desktop ? (hasCarousel ? 100 : hasFeatured ? 112 : 16) : (hasCarousel ? 136 : hasFeatured ? 214 : 16);
+  // 手機：工具列直排在上、毛孩站在工具列下方，避開下方的店家卡片
+  const bottom = desktop ? (hasCarousel ? 100 : hasFeatured ? 112 : 16) : (hasCarousel ? 116 : hasFeatured ? 198 : 16);
   const left = desktop ? 12 : 10;
   // 桌機右側 AI 對話框開著時，中間放不下就先縮成頭像（點開時蓋在最上層）
   const chatW = chatWide ? (wide ? 400 : 340) : (wide ? 320 : 300);
@@ -101,7 +107,7 @@ export default function PetCompanion({
   const [asleep, setAsleep] = useState(false);
   const [out, setOut] = useState<'home' | 'out' | 'returning'>('home');
   const [showStats, setShowStats] = useState(0); // 點牠時在頭上顯示名字與數值（時間戳）
-  const [openCat, setOpenCat] = useState<'food' | 'toy' | 'bath' | null>(null);
+  const [openCat, setOpenCat] = useState<'food' | 'play' | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   // 點畫面其他地方就收起展開的分類
   useEffect(() => {
@@ -151,7 +157,7 @@ export default function PetCompanion({
   useEffect(() => {
     if (!loggedIn) { setSnap({ loggedIn: false }); return; }
     fetch('/api/vpet').then(r => (r.ok ? r.json() : null)).then(j => j && mounted.current && setSnap(j)).catch(() => {});
-  }, [loggedIn]);
+  }, [loggedIn, refreshKey]);
   useLayoutEffect(() => { xRef.current = Math.min(Math.max(xRef.current, PET_H * 0.6), W - 50); setX(xRef.current); }, [W, PET_H]);
 
   const toggleMin = (v: boolean) => {
@@ -235,15 +241,20 @@ export default function PetCompanion({
     lastInteract.current = Date.now();
     await act('stretch', 1300);
   }, [act]);
+  // 白天：一分鐘沒人理就自己出門散步；晚上、太餓或紀念模式：時間到就睡著
+  const goWalkRef = useRef<(auto?: boolean) => void>();
   useEffect(() => {
-    if (minimized || hidden) return;
+    if (minimized || hidden || (!desktop && chatOpen)) return;
     const t = window.setInterval(() => {
       if (asleepRef.current || busyRef.current || dragging.current || out !== 'home') return;
-      const limit = isNightTW() ? SLEEP_AFTER_NIGHT_MS : SLEEP_AFTER_MS;
-      if (Date.now() - lastInteract.current > limit) { asleepRef.current = true; setAsleep(true); }
+      const idle = Date.now() - lastInteract.current;
+      const night = isNightTW();
+      if (!night && !hungry && !memorial && idle > WALK_AFTER_MS) { goWalkRef.current?.(true); return; }
+      const limit = night ? SLEEP_AFTER_NIGHT_MS : SLEEP_AFTER_MS;
+      if (idle > limit) { asleepRef.current = true; setAsleep(true); }
     }, 5000);
     return () => window.clearInterval(t);
-  }, [minimized, hidden, out]);
+  }, [minimized, hidden, out, hungry, memorial, desktop, chatOpen]);
 
   // ---- 點牠 ----
   const onPetClick = async (e: React.MouseEvent<HTMLButtonElement>) => {
@@ -273,7 +284,7 @@ export default function PetCompanion({
   const doDrop = async (item: TrayItem, dropX: number) => {
     setOpenCat(null);
     if (busyRef.current) return;
-    if (out !== 'home') { tell(`${name} 出門散步了，先叫牠回來`); return; }
+    if (out !== 'home') { tell(`${name} 出門散步了，先按「喚回」`); return; }
     if (asleepRef.current) await wake();
     if (item.disabled) { tell(item.disabled); await act('tilt', 900); return; }
     if (memorial && item.kind !== 'bath') { tell('紀念模式下不用餵食'); return; }
@@ -379,21 +390,24 @@ export default function PetCompanion({
     const ne = b.getNorthEast(), sw = b.getSouthWest();
     return { lat: ne.lat() - ((cy - r.top) / r.height) * (ne.lat() - sw.lat()), lng: sw.lng() + ((cx - r.left) / r.width) * (ne.lng() - sw.lng()) };
   };
-  const goWalk = async () => {
+  const goWalk = async (auto = false) => {
     if (out !== 'home' || busyRef.current) return;
-    if (asleepRef.current) await wake();
-    if (memorial) { tell('紀念模式下不能出門'); return; }
-    if (hungry) { tell(`${name} 太餓了走不動，先餵牠`); await act('hungry', 1200); return; }
+    // 自己出門時如果還不能走（地圖沒好、被藏起來），等一分鐘再試，不跳提示
+    const later = () => { lastInteract.current = Date.now(); };
+    if (memorial || hungry) { later(); return; }
     const map = getMap();
     const g = (window as any).google;
-    if (!map || !g?.maps) { tell('地圖還沒準備好'); return; }
+    if (!map || !g?.maps) { later(); return; }
     const r = petBtn.current?.getBoundingClientRect();
     const start = r ? screenToLatLng(map, r.left + r.width / 2, r.bottom - 4) : null;
     const c = map.getCenter();
     const center = walkHome ?? (c ? { lat: c.lat(), lng: c.lng() } : null);
-    if (!start || !center) { tell('地圖還沒準備好'); return; }
+    if (!start || !center) { later(); return; }
+    void auto;
     lastInteract.current = Date.now();
-    await act('bark', 500, true);
+    busyRef.current = true; // 出門前叫一聲的這半秒不接別的動作
+    try { await act('bark', 500, true); } finally { busyRef.current = false; }
+    if (!mounted.current) return;
     const { createWalker } = await import('@/components/petMapWalker');
     walker.current?.destroy();
     walker.current = createWalker({
@@ -404,6 +418,7 @@ export default function PetCompanion({
     });
     if (mounted.current) setOut('out');
   };
+  goWalkRef.current = goWalk;
   const callBack = async () => {
     if (out !== 'out' || !walker.current) return;
     setOut('returning');
@@ -484,14 +499,13 @@ export default function PetCompanion({
   const effPose: Pose = asleep ? 'sleep' : pose === 'idle' && hungry ? 'hungry' : pose;
   const native = NATIVE_FACING[effPose];
   const flip = native !== 0 && native !== facing;
-  // 飼料欄只放三個分類：餵食、玩具、洗澡。外圈就是牠的狀態（飽足、心情、清潔），低於 30 變紅輕閃。
-  // 點分類展開裡面的東西；直接拖分類＝用第一個能用的
-  const cats: { key: 'food' | 'toy' | 'bath'; label: string; meter: { v: number; c: string; name: string }; items: TrayItem[] }[] = [
-    { key: 'food', label: '餵食', meter: { v: stats.fullness, c: '#B88746', name: '飽足' }, items: tray.filter(t => t.kind === 'food') },
-    { key: 'toy', label: '玩具', meter: { v: stats.mood, c: '#4D8B6F', name: '心情' }, items: tray.filter(t => t.kind === 'toy') },
-    { key: 'bath', label: '洗澡', meter: { v: stats.cleanliness, c: '#6FA8C9', name: '清潔' }, items: tray.filter(t => t.kind === 'bath') },
+  // 工具列：餵食、互動、商店；散步中最下面多一個「喚回」
+  // 外圈就是牠的狀態：餵食＝飽足；互動＝外圈心情、內圈清潔。低於 30 變紅輕閃
+  // 點分類往右拉出裡面的東西；直接拖分類＝用第一個能用的
+  const cats: { key: 'food' | 'play'; label: string; rings: { v: number; c: string; name: string }[]; items: TrayItem[] }[] = [
+    { key: 'food', label: '餵食', rings: [{ v: stats.fullness, c: '#B88746', name: '飽足' }], items: tray.filter(t => t.kind === 'food') },
+    { key: 'play', label: '互動', rings: [{ v: stats.mood, c: '#4D8B6F', name: '心情' }, { v: stats.cleanliness, c: '#6FA8C9', name: '清潔' }], items: [...tray.filter(t => t.kind === 'toy'), ...tray.filter(t => t.kind === 'bath')] },
   ];
-  const R = 19, C = 2 * Math.PI * R;
   const itemBtn = (it: TrayItem) => (
     <button
       key={it.key}
@@ -506,35 +520,46 @@ export default function PetCompanion({
       <span className={`text-[9px] font-bold text-[#6E5A4D] leading-tight whitespace-nowrap ${it.disabled ? 'opacity-50' : ''}`}>{it.label}</span>
     </button>
   );
+  const ring = (r: { v: number; c: string }, radius: number, low: boolean) => {
+    const C = 2 * Math.PI * radius;
+    return (
+      <g key={radius}>
+        <circle cx="22" cy="22" r={radius} fill="none" stroke="#E8DFD8" strokeWidth="3" />
+        <circle cx="22" cy="22" r={radius} fill="none" stroke={low ? '#C0705A' : r.c} strokeWidth="3" strokeLinecap="round" strokeDasharray={C} strokeDashoffset={C * (1 - r.v / 100)} style={{ transition: 'stroke-dashoffset .5s' }} />
+      </g>
+    );
+  };
+  const toolBtn = 'flex flex-col items-center rounded-xl px-0.5 py-0.5 touch-none cursor-pointer';
 
   const column = (
     <div className="pointer-events-auto flex flex-col items-center gap-0.5 px-1 py-1 rounded-2xl bg-[#FFFDF9]/90 backdrop-blur ring-1 ring-[#E8DFD8] shadow-sm" role="toolbar" aria-orientation="vertical" aria-label="照顧毛孩：點分類展開，或直接拖到牠旁邊">
         <button type="button" onClick={() => toggleMin(true)} aria-label="縮小毛孩" className="text-[#A67C52] text-xs leading-none py-1 w-full">—</button>
         {cats.map(cat => {
-          const v = Math.round(Math.max(0, Math.min(100, cat.meter.v)));
-          const low = !memorial && v < 30;
+          const vals = cat.rings.map(r => Math.round(Math.max(0, Math.min(100, r.v))));
+          const lows = vals.map(v => !memorial && v < 30);
+          const low = lows.some(Boolean);
           const first = cat.items.find(i => !i.disabled) ?? cat.items[0];
           const open = openCat === cat.key;
+          const status = cat.rings.map((r, i) => `${r.name} ${vals[i]}`).join('、');
           return (
             <div key={cat.key} className="relative">
               <button
                 type="button"
-                onPointerDown={e => first && startDrag(e, first, () => setOpenCat(o => (o === cat.key ? null : cat.key)))}
+                onPointerDown={e => { if (out !== 'home') { e.preventDefault(); if (out === 'out') callBack(); setOpenCat(cat.key); return; } if (first) startDrag(e, first, () => setOpenCat(o => (o === cat.key ? null : cat.key))); }}
                 onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpenCat(o => (o === cat.key ? null : cat.key)); } }}
                 aria-expanded={open}
-                aria-label={`${cat.label}，${cat.meter.name} ${v}${low ? '，偏低' : ''}`}
-                title={`${cat.meter.name} ${v}`}
-                className={`flex flex-col items-center rounded-xl px-0.5 py-0.5 touch-none cursor-pointer ${open ? 'bg-[#F7F2EA]' : 'hover:bg-[#F7F2EA]'}`}
+                aria-label={`${cat.label}，${status}${low ? '，偏低' : ''}`}
+                title={status}
+                className={`${toolBtn} ${open ? 'bg-[#F7F2EA]' : 'hover:bg-[#F7F2EA]'}`}
                 style={{ width: 48 }}
               >
                 <span className={`relative w-10 h-10 flex items-center justify-center ${low ? 'animate-pulse' : ''}`}>
                   {!memorial && (
                     <svg className="absolute inset-0 -rotate-90" viewBox="0 0 44 44" aria-hidden="true">
-                      <circle cx="22" cy="22" r={R} fill="none" stroke="#E8DFD8" strokeWidth="3" />
-                      <circle cx="22" cy="22" r={R} fill="none" stroke={low ? '#C0705A' : cat.meter.c} strokeWidth="3" strokeLinecap="round" strokeDasharray={C} strokeDashoffset={C * (1 - v / 100)} style={{ transition: 'stroke-dashoffset .5s' }} />
+                      {cat.rings.map((r, i) => ring({ v: vals[i], c: r.c }, 20 - i * 4, lows[i]))}
                     </svg>
                   )}
-                  <img src={first?.img ?? PROP.bowl} alt="" draggable={false} className="w-7 h-7 object-contain pointer-events-none" />
+                  <img src={first?.img ?? PROP.bowl} alt="" draggable={false} className={`${cat.rings.length > 1 ? 'w-6 h-6' : 'w-7 h-7'} object-contain pointer-events-none`} />
                   {low && <span className="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-[#C0705A] text-white text-[9px] font-black leading-[14px] text-center" aria-hidden="true">!</span>}
                 </span>
                 <span className={`text-[9px] font-bold leading-tight ${low ? 'text-[#C0705A]' : 'text-[#6E5A4D]'}`}>{cat.label}</span>
@@ -542,15 +567,25 @@ export default function PetCompanion({
               {open && (
                 <div className="absolute left-full top-0 ml-1.5 flex gap-0.5 p-1 rounded-2xl bg-[#FFFDF9]/95 backdrop-blur ring-1 ring-[#E8DFD8] shadow-md animate-[petdrop_.2s_ease-out] z-10">
                   {cat.items.map(itemBtn)}
-                  <a href="/pet" className="shrink-0 flex flex-col items-center justify-center rounded-xl px-0.5 hover:bg-[#F7F2EA]" style={{ width: 44 }}>
-                    <span className="text-lg leading-7" aria-hidden="true">🛍️</span>
-                    <span className="text-[9px] font-bold text-[#B88746] leading-tight">商店</span>
-                  </a>
+                  <button type="button" onClick={() => { setOpenCat(null); onShop(); }} className="shrink-0 flex flex-col items-center justify-center rounded-xl px-0.5 hover:bg-[#F7F2EA]" style={{ width: 44 }}>
+                    <img src={SHOP_ICON} alt="" draggable={false} className="w-7 h-7 object-contain" />
+                    <span className="text-[9px] font-bold text-[#B88746] leading-tight">買更多</span>
+                  </button>
                 </div>
               )}
             </div>
           );
         })}
+        <button type="button" onClick={() => { setOpenCat(null); onShop(); }} aria-label="商店：用點數買零食、玩具、穿搭" className={`${toolBtn} hover:bg-[#F7F2EA]`} style={{ width: 48 }}>
+          <span className="w-10 h-10 flex items-center justify-center"><img src={SHOP_ICON} alt="" draggable={false} className="w-8 h-8 object-contain" /></span>
+          <span className="text-[9px] font-bold leading-tight text-[#B88746]">商店</span>
+        </button>
+        {out !== 'home' && (
+          <button type="button" disabled={out !== 'out'} onClick={callBack} aria-label={out === 'returning' ? `${name} 跑回來了` : `喚回 ${name}`} className={`${toolBtn} mt-0.5 bg-[#FFF4E5] ring-1 ring-[#F0D9B5] hover:bg-[#FBE9CF] disabled:opacity-60 animate-[petdrop_.25s_ease-out]`} style={{ width: 48 }}>
+            <span className="w-10 h-10 flex items-center justify-center"><img src={SPRITE.run} alt="" draggable={false} className={`w-9 h-9 object-contain ${out === 'out' ? 'animate-[petwalk_.32s_ease-in-out_infinite]' : ''}`} style={{ transform: 'scaleX(-1)' }} /></span>
+            <span className="text-[9px] font-black leading-tight text-[#B88746]">{out === 'returning' ? '回來中' : '喚回'}</span>
+          </button>
+        )}
       </div>
   );
   const ghost = drag && drag.moved ? (
@@ -581,15 +616,7 @@ export default function PetCompanion({
             />
           ))}
 
-          {out !== 'home' ? (
-            <div className="absolute left-0 bottom-3 flex items-center gap-1.5 w-max max-w-[calc(100vw-28px)] whitespace-nowrap pointer-events-auto">
-              <p className="text-[12px] font-bold text-[#6E5A4D] bg-[#FFFDF9]/90 rounded-full px-2.5 py-1 shadow-sm truncate min-w-0">{out === 'returning' ? `${name} 跑回來了…` : `${name} 散步中`}</p>
-              <div className="flex gap-1.5 shrink-0">
-                <button type="button" disabled={out !== 'out'} onClick={callBack} className="px-3 py-2 rounded-xl text-xs font-black text-white bg-[#B88746] shadow active:scale-95 disabled:opacity-50">📣 叫牠回來</button>
-                <button type="button" disabled={out !== 'out'} onClick={() => walker.current?.panTo()} className="px-3 py-2 rounded-xl text-xs font-black text-[#38312D] bg-white ring-1 ring-[#E8DFD8] shadow active:scale-95 disabled:opacity-50">📍 看牠在哪</button>
-              </div>
-            </div>
-          ) : (
+          {out === 'home' && (
             <button
               ref={petBtn}
               type="button"
@@ -626,9 +653,6 @@ export default function PetCompanion({
             <div className="absolute -translate-x-1/2 px-2.5 py-1 rounded-full bg-[#FFFDF9]/95 ring-1 ring-[#E8DFD8] shadow text-[10px] font-bold text-[#6E5A4D] whitespace-nowrap animate-[petdrop_.2s_ease-out] pointer-events-none" style={{ left: Math.min(Math.max(x, 70), W - 70), bottom: PET_H + 4 }} aria-hidden="true">
               <b className="text-[#38312D]">{name}</b>　飽 {Math.round(stats.fullness)}・潔 {Math.round(stats.cleanliness)}・心 {Math.round(stats.mood)}
             </div>
-          )}
-          {out === 'home' && !asleep && !busyRef.current && !showStats && (
-            <button type="button" onClick={goWalk} style={{ left: x + PET_H * 0.45 }} className="absolute bottom-0 pointer-events-auto px-2 py-1 rounded-full text-[10px] font-black text-[#4D8B6F] bg-[#FFFDF9]/90 ring-1 ring-[#CFE3D7] shadow-sm active:scale-95">🦮 散步</button>
           )}
           {particles.map(p => (
             <span key={p.id} className={`absolute pointer-events-none -translate-x-1/2 animate-[petfloat_1.3s_ease-out_forwards] ${p.cls || ''}`} style={{ left: p.x, top: p.y }} aria-hidden="true">{p.text}</span>
@@ -651,9 +675,9 @@ export default function PetCompanion({
     </div>
   );
 
-  // 手機：照顧按鈕和毛孩放在一起
+  // 手機：工具列直排在上面，毛孩站在工具列下方、店家卡片上方
   return (
-    <div ref={rootRef} className={`absolute z-[15] pointer-events-none select-none flex items-end gap-1.5`} style={{ bottom, left }}>
+    <div ref={rootRef} className={`absolute z-[15] pointer-events-none select-none flex flex-col items-start gap-1.5`} style={{ bottom, left }}>
       {column}
       <div style={{ width: W }}>
         {/* 舞台 */}
@@ -672,15 +696,7 @@ export default function PetCompanion({
             />
           ))}
 
-          {out !== 'home' ? (
-            <div className="absolute left-0 bottom-3 flex items-center gap-1.5 w-max max-w-[calc(100vw-28px)] whitespace-nowrap pointer-events-auto">
-              <p className="text-[12px] font-bold text-[#6E5A4D] bg-[#FFFDF9]/90 rounded-full px-2.5 py-1 shadow-sm truncate min-w-0">{out === 'returning' ? `${name} 跑回來了…` : `${name} 散步中`}</p>
-              <div className="flex gap-1.5 shrink-0">
-                <button type="button" disabled={out !== 'out'} onClick={callBack} className="px-3 py-2 rounded-xl text-xs font-black text-white bg-[#B88746] shadow active:scale-95 disabled:opacity-50">📣 叫牠回來</button>
-                <button type="button" disabled={out !== 'out'} onClick={() => walker.current?.panTo()} className="px-3 py-2 rounded-xl text-xs font-black text-[#38312D] bg-white ring-1 ring-[#E8DFD8] shadow active:scale-95 disabled:opacity-50">📍 看牠在哪</button>
-              </div>
-            </div>
-          ) : (
+          {out === 'home' && (
             <button
               ref={petBtn}
               type="button"
@@ -717,9 +733,6 @@ export default function PetCompanion({
             <div className="absolute -translate-x-1/2 px-2.5 py-1 rounded-full bg-[#FFFDF9]/95 ring-1 ring-[#E8DFD8] shadow text-[10px] font-bold text-[#6E5A4D] whitespace-nowrap animate-[petdrop_.2s_ease-out] pointer-events-none" style={{ left: Math.min(Math.max(x, 70), W - 70), bottom: PET_H + 4 }} aria-hidden="true">
               <b className="text-[#38312D]">{name}</b>　飽 {Math.round(stats.fullness)}・潔 {Math.round(stats.cleanliness)}・心 {Math.round(stats.mood)}
             </div>
-          )}
-          {out === 'home' && !asleep && !busyRef.current && !showStats && (
-            <button type="button" onClick={goWalk} style={{ left: x + PET_H * 0.45 }} className="absolute bottom-0 pointer-events-auto px-2 py-1 rounded-full text-[10px] font-black text-[#4D8B6F] bg-[#FFFDF9]/90 ring-1 ring-[#CFE3D7] shadow-sm active:scale-95">🦮 散步</button>
           )}
           {particles.map(p => (
             <span key={p.id} className={`absolute pointer-events-none -translate-x-1/2 animate-[petfloat_1.3s_ease-out_forwards] ${p.cls || ''}`} style={{ left: p.x, top: p.y }} aria-hidden="true">{p.text}</span>

@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useSession, signIn, signOut } from 'next-auth/react';
 import { 
-  Quote, PawPrint, Sparkles, Send, MapPin, 
+  Quote, Sparkles, Send, MapPin, 
   X, Coins, Star, RefreshCcw, Search, ChevronRight,
   Clock, Phone, Navigation, Map, MessageCircle, Globe, ChevronUp, ChevronDown,
   Edit3, Heart, AlertCircle, Pill, Syringe, Activity, ExternalLink, CheckCircle2, XCircle, FileText, LocateFixed, Mic
@@ -16,6 +16,7 @@ import dynamic from 'next/dynamic';
 
 // 毛孩分身晚一點載入，不拖慢地圖
 const PetCompanion = dynamic(() => import('@/components/PetCompanion'), { ssr: false });
+const PetShop = dynamic(() => import('@/components/PetShop'), { ssr: false });
 import ReportPrompt, { type VisitStore } from '@/components/ReportPrompt';
 import { POINTS_PER_REPORT } from '@/lib/report-questions';
 
@@ -193,6 +194,8 @@ export default function FullMapAIPortal() {
   const [coins, setCoins] = useState<number | null>(null);
   // 確認中的點數（飼主回報後 7 天才入帳）
   const [pendingCoins, setPendingCoins] = useState(0);
+  const [shopOpen, setShopOpen] = useState(false);
+  const [petRefresh, setPetRefresh] = useState(0);
   // 預設收起，避免手機先閃出對話框；桌面版掛載後再展開
   const [isAiBoxMinimized, setIsAiBoxMinimized] = useState(true);
   // 桌機預設開一個小對話框；飼主開始對話或按放大才變大
@@ -1125,9 +1128,6 @@ export default function FullMapAIPortal() {
                         {session?.user?.email && <div className="truncate">{session.user.email}</div>}
                         {coins !== null && <div className="mt-1 font-black text-[#B88746]">點數 {coins.toLocaleString()} P{pendingCoins > 0 && <span className="font-bold text-[#A67C52]">（另有 {pendingCoins} P 確認中）</span>}</div>}
                       </div>
-                      <a href="/pet" role="menuitem" className="w-full flex items-center px-3 py-2.5 rounded-xl text-sm font-bold text-[#4A423D] hover:bg-[#F7F2EA]">
-                        <PawPrint className="w-4 h-4 mr-2 text-[#B88746]" />毛孩樂園（用點數養分身）
-                      </a>
                       <button type="button" role="menuitem" onClick={() => signOut()} className="w-full flex items-center px-3 py-2.5 rounded-xl text-sm font-bold text-[#4A423D] hover:bg-[#F7F2EA]">
                         <LogOut className="w-4 h-4 mr-2" />登出
                       </button>
@@ -1203,8 +1203,17 @@ export default function FullMapAIPortal() {
           getMap={() => mapRef.current}
           stores={displayedStores.map(st => ({ lat: st.lat, lng: st.lng, name: st.name }))}
           walkHome={userLocation}
+          onShop={() => setShopOpen(true)}
+          refreshKey={petRefresh}
         />
       )}
+      {/* 毛孩商店：從左邊工具列的「商店」打開 */}
+      <PetShop
+        open={shopOpen}
+        onClose={() => setShopOpen(false)}
+        onLogin={() => signIn('google')}
+        onBought={(p, pending) => { setCoins(p); setPendingCoins(pending); setPetRefresh(n => n + 1); }}
+      />
 
       {showSearchHereBtn && (
         <div className="absolute top-[108px] md:top-24 left-0 right-0 z-20 flex justify-center pointer-events-none animate-in fade-in slide-in-from-top-4">
@@ -1328,7 +1337,7 @@ export default function FullMapAIPortal() {
       {/* 喚醒懸浮鈕 */}
       {isAiBoxMinimized && (
         <div className={`absolute z-30 flex flex-col items-end pointer-events-auto transition-all duration-400 ease-out right-4 md:right-6 ${!hasOpenedAi && !aiPeek ? 'animate-bounce' : ''} ${
-          (displayedStores.length > 0 || featuredStores.length > 0) && !selectedDetailStore ? 'bottom-[128px] md:bottom-8' : 'bottom-9 md:bottom-8'
+          (displayedStores.length > 0 || featuredStores.length > 0) && !selectedDetailStore ? 'bottom-[108px] md:bottom-8' : 'bottom-9 md:bottom-8'
         }`}>
           
           {aiPeek && (
@@ -1343,7 +1352,7 @@ export default function FullMapAIPortal() {
             </div>
           )}
           {!hasOpenedAi && !aiPeek && (
-            <div className="mb-2 mr-2 flex flex-col items-center pointer-events-none">
+            <div className="mb-2 mr-2 hidden md:flex flex-col items-center pointer-events-none">
               <div className="bg-[#E07A5F] text-white text-[13px] font-black px-4 py-2 rounded-2xl shadow-xl flex items-center space-x-1">
                 <span>👋 點這裡與 AI 對話！</span>
               </div>
@@ -1369,12 +1378,12 @@ export default function FullMapAIPortal() {
 
       {/* 底部店家精選卡片 */}
       {displayedStores.length > 0 && !selectedDetailStore && (
-        <div className={`absolute bottom-7 md:bottom-5 left-0 right-0 z-20 px-4 md:px-6 ${isAiBoxMinimized ? 'md:pr-48' : isAiCompact ? 'md:pr-[344px] lg:pr-[364px]' : 'md:pr-[380px] lg:pr-[440px]'} flex gap-3 md:gap-2 overflow-x-auto pb-2 snap-x md:snap-none hide-scrollbar pointer-events-auto`}>
+        <div className={`absolute bottom-7 md:bottom-5 left-0 right-0 z-20 px-3 md:px-6 ${isAiBoxMinimized ? 'md:pr-48' : isAiCompact ? 'md:pr-[344px] lg:pr-[364px]' : 'md:pr-[380px] lg:pr-[440px]'} flex gap-2 overflow-x-auto pb-2 snap-x md:snap-none hide-scrollbar pointer-events-auto`}>
           {displayedStores.map((store, index) => (
             <div 
               key={store.id} 
               onClick={() => openDetailModal(store)}
-              className="card-enter w-[78vw] max-w-[320px] md:w-[240px] h-[84px] md:h-[64px] flex-shrink-0 snap-center bg-[#FFFDF9]/92 backdrop-blur-2xl rounded-[22px] md:rounded-[16px] shadow-[0_12px_28px_rgba(184,135,70,0.12)] ring-1 ring-[#E8DFD8] overflow-hidden relative flex flex-row cursor-pointer transition-transform hover:-translate-y-0.5"
+              className="card-enter w-[calc((100vw-40px)/2.5)] md:w-[240px] h-[64px] flex-shrink-0 snap-start bg-[#FFFDF9]/92 backdrop-blur-2xl rounded-[16px] shadow-[0_12px_28px_rgba(184,135,70,0.12)] ring-1 ring-[#E8DFD8] overflow-hidden relative flex flex-row cursor-pointer transition-transform hover:-translate-y-0.5"
               style={{ animationDelay: `${index * 0.08}s` }}
             >
               <button 
@@ -1385,7 +1394,7 @@ export default function FullMapAIPortal() {
                 <X className="w-3 h-3" />
               </button>
 
-              <div className="relative w-[84px] md:w-[64px] h-full shrink-0">
+              <div className="relative w-[50px] md:w-[64px] h-full shrink-0">
                 <img src={store.photoUrl} alt="" className="w-full h-full object-cover" />
                 {store.photoAttributions.length > 0 && (
                   <span className="absolute top-1 left-1 right-1 text-[8px] leading-tight text-white/90 truncate drop-shadow">
@@ -1394,9 +1403,9 @@ export default function FullMapAIPortal() {
                 )}
               </div>
               
-              <div className="px-2.5 py-1.5 flex flex-col flex-1 justify-center min-w-0">
-                <h3 className="font-black text-[#38312D] text-sm md:text-[13px] leading-tight truncate pr-4">{store.name}</h3>
-                <div className="flex items-center mt-1 space-x-2 text-[11px] font-bold">
+              <div className="pl-1.5 pr-1 py-1 md:px-2.5 md:py-1.5 flex flex-col flex-1 justify-center min-w-0">
+                <h3 className="font-black text-[#38312D] text-[12px] md:text-[13px] leading-tight line-clamp-2 md:line-clamp-none md:truncate pr-3 md:pr-4">{store.name}</h3>
+                <div className="flex items-center mt-0.5 md:mt-1 space-x-1.5 md:space-x-2 text-[11px] font-bold overflow-hidden">
                   <span className="text-[#4D8B6F] flex items-center shrink-0">
                     <Navigation className="w-3 h-3 mr-0.5" aria-hidden="true" />
                     <span className="sr-only">距離</span>{store.distanceText}
@@ -1408,7 +1417,7 @@ export default function FullMapAIPortal() {
                     </span>
                   )}
                   {store.aiMentioned && (
-                    <span className="text-[10px] text-[#4D8B6F] bg-[#EAF3EE] rounded px-1 truncate" title="AI 依 Google 地圖資訊整理時提到這家；未提到不代表不符合">🔍 AI 有提到</span>
+                    <span className="hidden md:inline text-[10px] text-[#4D8B6F] bg-[#EAF3EE] rounded px-1 truncate" title="AI 依 Google 地圖資訊整理時提到這家；未提到不代表不符合">🔍 AI 有提到</span>
                   )}
                 </div>
               </div>
@@ -1431,15 +1440,15 @@ export default function FullMapAIPortal() {
             </span>
             <span className="ml-2 bg-[#FFFDF9]/90 rounded-full px-2 py-0.5 ring-1 ring-[#E8DFD8]"><GoogleMapsAttribution /></span>
           </h2>
-          <ul className="flex gap-3 md:gap-2 overflow-x-auto snap-x snap-mandatory md:snap-none touch-pan-x hide-scrollbar px-4 md:px-0 pb-1 md:w-max md:max-w-full">
+          <ul className="flex gap-2 overflow-x-auto snap-x snap-mandatory md:snap-none touch-pan-x hide-scrollbar px-3 md:px-0 pb-1 md:w-max md:max-w-full">
             {featuredStores.map((store, index) => (
               <li
                 key={store.id}
                 data-slot={index + 1}
-                className="card-enter relative w-[78vw] max-w-[320px] md:w-[224px] h-[80px] md:h-[58px] shrink-0 snap-center bg-[#FFFDF9]/92 backdrop-blur-2xl rounded-[22px] md:rounded-[16px] shadow-[0_12px_28px_rgba(184,135,70,0.12)] ring-1 ring-[#E8DFD8] overflow-hidden flex transition-transform hover:-translate-y-0.5 focus-within:ring-2 focus-within:ring-[#B88746]"
+                className="card-enter relative w-[calc((100vw-40px)/2.5)] md:w-[224px] h-[64px] md:h-[58px] shrink-0 snap-start bg-[#FFFDF9]/92 backdrop-blur-2xl rounded-[16px] shadow-[0_12px_28px_rgba(184,135,70,0.12)] ring-1 ring-[#E8DFD8] overflow-hidden flex transition-transform hover:-translate-y-0.5 focus-within:ring-2 focus-within:ring-[#B88746]"
                 style={{ animationDelay: `${index * 0.08}s` }}
               >
-                <div className="relative w-[80px] md:w-[58px] h-full shrink-0">
+                <div className="relative w-[50px] md:w-[58px] h-full shrink-0">
                   <img src={store.photoUrl} alt="" className="w-full h-full object-cover" />
                   {store.photoAttributions.length > 0 && (
                     <span className="absolute top-1 left-1 right-1 z-10 text-[8px] leading-tight text-white/90 truncate drop-shadow">
@@ -1452,18 +1461,18 @@ export default function FullMapAIPortal() {
                     </span>
                   )}
                 </div>
-                <div className="p-3 md:px-2.5 md:py-1.5 flex flex-col justify-center min-w-0 flex-1">
-                  <h3 className="font-black text-[#38312D] text-sm md:text-[13px] leading-tight truncate">
+                <div className="pl-1.5 pr-1 py-1 md:px-2.5 md:py-1.5 flex flex-col justify-center min-w-0 flex-1">
+                  <h3 className="font-black text-[#38312D] text-[12px] md:text-[13px] leading-tight line-clamp-2 md:line-clamp-none md:truncate">
                     {/* 整張卡片可點：按鈕的 ::after 蓋滿卡片，相片作者連結疊在上層仍可點 */}
                     <button
                       type="button"
                       onClick={() => openDetailModal(store)}
-                      className="text-left truncate max-w-full focus:outline-none after:absolute after:inset-0 after:content-['']"
+                      className="text-left md:truncate max-w-full focus:outline-none after:absolute after:inset-0 after:content-['']"
                     >
                       {store.name}
                     </button>
                   </h3>
-                  <div className="flex items-center mt-1.5 md:mt-1 space-x-2 text-[11px] font-bold">
+                  <div className="flex items-center mt-0.5 md:mt-1 space-x-1.5 md:space-x-2 text-[11px] font-bold overflow-hidden">
                     <span className="text-[#4D8B6F] flex items-center shrink-0">
                       <Navigation className="w-3 h-3 mr-0.5" aria-hidden="true" />
                       <span className="sr-only">距離</span>{store.distanceText}
