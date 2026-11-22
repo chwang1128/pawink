@@ -582,9 +582,9 @@ export default function PetCompanion({
           ))}
 
           {out !== 'home' ? (
-            <div className="absolute inset-x-0 bottom-3 flex flex-col items-center gap-2 pointer-events-auto">
-              <p className="text-[12px] font-bold text-[#6E5A4D] bg-[#FFFDF9]/90 rounded-full px-3 py-1 shadow-sm">{out === 'returning' ? `${name} 跑回來了…` : `${name} 出門散步了`}</p>
-              <div className="flex gap-2">
+            <div className="absolute left-0 bottom-3 flex items-center gap-1.5 w-max whitespace-nowrap pointer-events-auto">
+              <p className="text-[12px] font-bold text-[#6E5A4D] bg-[#FFFDF9]/90 rounded-full px-2.5 py-1 shadow-sm">{out === 'returning' ? `${name} 跑回來了…` : `${name} 散步中`}</p>
+              <div className="flex gap-1.5">
                 <button type="button" disabled={out !== 'out'} onClick={callBack} className="px-3 py-2 rounded-xl text-xs font-black text-white bg-[#B88746] shadow active:scale-95 disabled:opacity-50">📣 叫牠回來</button>
                 <button type="button" disabled={out !== 'out'} onClick={() => walker.current?.panTo()} className="px-3 py-2 rounded-xl text-xs font-black text-[#38312D] bg-white ring-1 ring-[#E8DFD8] shadow active:scale-95 disabled:opacity-50">📍 看牠在哪</button>
               </div>
@@ -673,9 +673,9 @@ export default function PetCompanion({
           ))}
 
           {out !== 'home' ? (
-            <div className="absolute inset-x-0 bottom-3 flex flex-col items-center gap-2 pointer-events-auto">
-              <p className="text-[12px] font-bold text-[#6E5A4D] bg-[#FFFDF9]/90 rounded-full px-3 py-1 shadow-sm">{out === 'returning' ? `${name} 跑回來了…` : `${name} 出門散步了`}</p>
-              <div className="flex gap-2">
+            <div className="absolute left-0 bottom-3 flex items-center gap-1.5 w-max whitespace-nowrap pointer-events-auto">
+              <p className="text-[12px] font-bold text-[#6E5A4D] bg-[#FFFDF9]/90 rounded-full px-2.5 py-1 shadow-sm">{out === 'returning' ? `${name} 跑回來了…` : `${name} 散步中`}</p>
+              <div className="flex gap-1.5">
                 <button type="button" disabled={out !== 'out'} onClick={callBack} className="px-3 py-2 rounded-xl text-xs font-black text-white bg-[#B88746] shadow active:scale-95 disabled:opacity-50">📣 叫牠回來</button>
                 <button type="button" disabled={out !== 'out'} onClick={() => walker.current?.panTo()} className="px-3 py-2 rounded-xl text-xs font-black text-[#38312D] bg-white ring-1 ring-[#E8DFD8] shadow active:scale-95 disabled:opacity-50">📍 看牠在哪</button>
               </div>
