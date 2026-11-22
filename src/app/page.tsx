@@ -1,5 +1,5 @@
 'use client';
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { useSession, signIn, signOut } from 'next-auth/react';
 import { 
   Quote, Sparkles, Send, MapPin, 
@@ -195,6 +195,8 @@ export default function FullMapAIPortal() {
   // 確認中的點數（飼主回報後 7 天才入帳）
   const [pendingCoins, setPendingCoins] = useState(0);
   const [shopOpen, setShopOpen] = useState(false);
+  // 新的搜尋結果出來時，卡片列捲回最左邊（不然會停在上一次滑到的位置，第一張被切掉）
+  const cardRowRef = useRef<HTMLDivElement>(null);
   const [petRefresh, setPetRefresh] = useState(0);
   // 預設收起，避免手機先閃出對話框；桌面版掛載後再展開
   const [isAiBoxMinimized, setIsAiBoxMinimized] = useState(true);
@@ -323,6 +325,15 @@ export default function FullMapAIPortal() {
   const [inputQuery, setInputQuery] = useState('');
   const [stores, setStores] = useState<Store[]>([]);
   const [displayedStores, setDisplayedStores] = useState<Store[]>([]);
+  const cardIds = displayedStores.map(st => st.id).join(',');
+  const firstCardIds = useRef('');
+  useLayoutEffect(() => {
+    // 只有換了一批店家才捲回去；在列表裡刪掉一張不用（畫面畫出來前就捲回，不會閃一下）
+    const prev = firstCardIds.current.split(',');
+    const now = cardIds.split(',');
+    firstCardIds.current = cardIds;
+    if (now[0] && !now.every(id => prev.includes(id))) cardRowRef.current?.scrollTo({ left: 0 });
+  }, [cardIds]);
   // 左下角「附近店家」三個版位：開站時依使用者位置顯示最近的三家。
   // 之後要開放給店家刊登廣告時，從這裡換成付費店家（並加上「贊助」標示）。
   const [featuredStores, setFeaturedStores] = useState<Store[]>([]);
@@ -1378,7 +1389,7 @@ export default function FullMapAIPortal() {
 
       {/* 底部店家精選卡片 */}
       {displayedStores.length > 0 && !selectedDetailStore && (
-        <div className={`absolute bottom-7 md:bottom-5 left-0 right-0 z-20 px-3 md:px-6 ${isAiBoxMinimized ? 'md:pr-48' : isAiCompact ? 'md:pr-[344px] lg:pr-[364px]' : 'md:pr-[380px] lg:pr-[440px]'} flex gap-2 overflow-x-auto pb-2 snap-x md:snap-none hide-scrollbar pointer-events-auto`}>
+        <div ref={cardRowRef} className={`absolute bottom-7 md:bottom-5 left-0 right-0 z-20 px-3 md:px-6 scroll-px-3 md:scroll-px-6 ${isAiBoxMinimized ? 'md:pr-48' : isAiCompact ? 'md:pr-[344px] lg:pr-[364px]' : 'md:pr-[380px] lg:pr-[440px]'} flex gap-2 overflow-x-auto pb-2 snap-x md:snap-none hide-scrollbar pointer-events-auto`}>
           {displayedStores.map((store, index) => (
             <div 
               key={store.id} 
@@ -1440,7 +1451,7 @@ export default function FullMapAIPortal() {
             </span>
             <span className="ml-2 bg-[#FFFDF9]/90 rounded-full px-2 py-0.5 ring-1 ring-[#E8DFD8]"><GoogleMapsAttribution /></span>
           </h2>
-          <ul className="flex gap-2 overflow-x-auto snap-x snap-mandatory md:snap-none touch-pan-x hide-scrollbar px-3 md:px-0 pb-1 md:w-max md:max-w-full">
+          <ul className="flex gap-2 overflow-x-auto snap-x snap-mandatory md:snap-none touch-pan-x hide-scrollbar px-3 scroll-px-3 md:px-0 md:scroll-px-0 pb-1 md:w-max md:max-w-full">
             {featuredStores.map((store, index) => (
               <li
                 key={store.id}
