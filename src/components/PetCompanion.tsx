@@ -79,7 +79,7 @@ export default function PetCompanion({
   const wide = vw >= 1024;
   // 桌機：照顧按鈕沿著畫面最左邊直排（標題列下方開始），毛孩站在左下、店家卡片的上方
   // 手機：照顧按鈕和毛孩放在一起，避開下方的店家卡片
-  const bottom = desktop ? (hasCarousel ? 196 : hasFeatured ? 112 : 16) : (hasCarousel ? 196 : hasFeatured ? 214 : 16);
+  const bottom = desktop ? (hasCarousel ? 100 : hasFeatured ? 112 : 16) : (hasCarousel ? 136 : hasFeatured ? 214 : 16);
   const left = desktop ? 12 : 10;
   // 桌機右側 AI 對話框開著時，中間放不下就先縮成頭像（點開時蓋在最上層）
   const chatW = chatWide ? (wide ? 400 : 340) : (wide ? 320 : 300);
@@ -409,7 +409,7 @@ export default function PetCompanion({
     setOut('returning');
     const m = mapBox();
     const s = stageRef.current?.getBoundingClientRect();
-    const tx = s && m ? s.left + s.width / 2 - m.left : 80;
+    const tx = s && m ? s.left + 60 - m.left : 80;
     const ty = s && m ? s.bottom - 8 - m.top : (m ? m.height - 60 : 400);
     await walker.current.recall(tx, ty);
     walker.current = null;
@@ -628,7 +628,7 @@ export default function PetCompanion({
             </div>
           )}
           {out === 'home' && !asleep && !busyRef.current && !showStats && (
-            <button type="button" onClick={goWalk} className="absolute right-1 top-1 pointer-events-auto px-2 py-1 rounded-full text-[10px] font-black text-[#4D8B6F] bg-[#FFFDF9]/90 ring-1 ring-[#CFE3D7] shadow-sm active:scale-95">🦮 帶去散步</button>
+            <button type="button" onClick={goWalk} style={{ left: Math.min(Math.max(x - 40, 4), W - 96) }} className="absolute top-1 pointer-events-auto px-2 py-1 rounded-full text-[10px] font-black text-[#4D8B6F] bg-[#FFFDF9]/90 ring-1 ring-[#CFE3D7] shadow-sm active:scale-95">🦮 帶去散步</button>
           )}
           {particles.map(p => (
             <span key={p.id} className={`absolute pointer-events-none -translate-x-1/2 animate-[petfloat_1.3s_ease-out_forwards] ${p.cls || ''}`} style={{ left: p.x, top: p.y }} aria-hidden="true">{p.text}</span>
@@ -719,7 +719,7 @@ export default function PetCompanion({
             </div>
           )}
           {out === 'home' && !asleep && !busyRef.current && !showStats && (
-            <button type="button" onClick={goWalk} className="absolute right-1 top-1 pointer-events-auto px-2 py-1 rounded-full text-[10px] font-black text-[#4D8B6F] bg-[#FFFDF9]/90 ring-1 ring-[#CFE3D7] shadow-sm active:scale-95">🦮 帶去散步</button>
+            <button type="button" onClick={goWalk} style={{ left: Math.min(Math.max(x - 40, 4), W - 96) }} className="absolute top-1 pointer-events-auto px-2 py-1 rounded-full text-[10px] font-black text-[#4D8B6F] bg-[#FFFDF9]/90 ring-1 ring-[#CFE3D7] shadow-sm active:scale-95">🦮 帶去散步</button>
           )}
           {particles.map(p => (
             <span key={p.id} className={`absolute pointer-events-none -translate-x-1/2 animate-[petfloat_1.3s_ease-out_forwards] ${p.cls || ''}`} style={{ left: p.x, top: p.y }} aria-hidden="true">{p.text}</span>

@@ -1328,7 +1328,7 @@ export default function FullMapAIPortal() {
       {/* 喚醒懸浮鈕 */}
       {isAiBoxMinimized && (
         <div className={`absolute z-30 flex flex-col items-end pointer-events-auto transition-all duration-400 ease-out right-4 md:right-6 ${!hasOpenedAi && !aiPeek ? 'animate-bounce' : ''} ${
-          (displayedStores.length > 0 || featuredStores.length > 0) && !selectedDetailStore ? 'bottom-[176px] md:bottom-8' : 'bottom-9 md:bottom-8'
+          (displayedStores.length > 0 || featuredStores.length > 0) && !selectedDetailStore ? 'bottom-[128px] md:bottom-8' : 'bottom-9 md:bottom-8'
         }`}>
           
           {aiPeek && (
@@ -1369,56 +1369,48 @@ export default function FullMapAIPortal() {
 
       {/* 底部店家精選卡片 */}
       {displayedStores.length > 0 && !selectedDetailStore && (
-        <div className="absolute bottom-7 md:bottom-9 left-0 right-0 z-20 px-4 md:px-6 md:pr-[380px] lg:pr-[440px] flex space-x-4 overflow-x-auto pb-2 snap-x hide-scrollbar pointer-events-auto">
+        <div className={`absolute bottom-7 md:bottom-5 left-0 right-0 z-20 px-4 md:px-6 ${isAiBoxMinimized ? 'md:pr-48' : isAiCompact ? 'md:pr-[344px] lg:pr-[364px]' : 'md:pr-[380px] lg:pr-[440px]'} flex gap-3 md:gap-2 overflow-x-auto pb-2 snap-x md:snap-none hide-scrollbar pointer-events-auto`}>
           {displayedStores.map((store, index) => (
             <div 
               key={store.id} 
               onClick={() => openDetailModal(store)}
-              className="card-enter w-[85vw] sm:w-[320px] h-[130px] md:h-[150px] flex-shrink-0 snap-center bg-[#FFFDF9]/90 backdrop-blur-2xl rounded-[24px] md:rounded-[32px] shadow-[0_16px_32px_rgba(184,135,70,0.1)] ring-1 ring-[#E8DFD8] overflow-hidden relative flex flex-row cursor-pointer transition-transform hover:-translate-y-1"
-              style={{ animationDelay: `${index * 0.1}s` }}
+              className="card-enter w-[78vw] max-w-[320px] md:w-[240px] h-[84px] md:h-[64px] flex-shrink-0 snap-center bg-[#FFFDF9]/92 backdrop-blur-2xl rounded-[22px] md:rounded-[16px] shadow-[0_12px_28px_rgba(184,135,70,0.12)] ring-1 ring-[#E8DFD8] overflow-hidden relative flex flex-row cursor-pointer transition-transform hover:-translate-y-0.5"
+              style={{ animationDelay: `${index * 0.08}s` }}
             >
               <button 
                 onClick={(e) => { e.stopPropagation(); setDisplayedStores(displayedStores.filter(s => s.id !== store.id)); }} 
-                className="absolute top-2 right-2 bg-black/20 hover:bg-black/40 backdrop-blur-md text-white p-1.5 rounded-full transition-colors z-20"
+                aria-label={`從列表移除 ${store.name}`}
+                className="absolute top-1 right-1 text-[#A67C52] hover:text-[#38312D] hover:bg-[#F7F2EA] p-1 rounded-full transition-colors z-20"
               >
-                <X className="w-3.5 h-3.5" />
+                <X className="w-3 h-3" />
               </button>
 
-              <div className="relative w-[120px] md:w-[140px] h-full shrink-0">
-                <img src={store.photoUrl} alt={store.name} className="w-full h-full object-cover" />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent"></div>
+              <div className="relative w-[84px] md:w-[64px] h-full shrink-0">
+                <img src={store.photoUrl} alt="" className="w-full h-full object-cover" />
                 {store.photoAttributions.length > 0 && (
-                  <span className="absolute top-1.5 left-1.5 right-1.5 text-[9px] leading-tight text-white/85 truncate drop-shadow">
+                  <span className="absolute top-1 left-1 right-1 text-[8px] leading-tight text-white/90 truncate drop-shadow">
                     相片：{store.photoAttributions[0].displayName}
                   </span>
                 )}
-                
-                <div className="absolute bottom-2 left-2 right-2 flex flex-col space-y-1">
-                   <span className="bg-[#4D8B6F]/90 backdrop-blur-md text-white text-[10px] font-bold px-1.5 py-0.5 rounded-md flex items-center w-max">
-                    <Navigation className="w-2.5 h-2.5 mr-0.5" />
-                    {store.distanceText}
-                  </span>
-                  {store.rating !== null && (
-                    <div className="bg-white/95 backdrop-blur-sm px-1.5 py-0.5 rounded-lg shadow-sm flex items-center w-max">
-                      <Star className="w-3 h-3 text-amber-500 fill-current" />
-                      <span className="font-extrabold text-xs text-[#38312D] ml-0.5">{store.rating}</span>
-                    </div>
-                  )}
-                </div>
               </div>
               
-              <div className="p-3 md:p-4 flex flex-col flex-1 relative justify-center overflow-hidden">
-                <h3 className="font-black text-[#38312D] text-sm md:text-base leading-tight line-clamp-1 pr-6 mb-1">{store.name}</h3>
-                {store.aiMentioned && (
-                  <span className="text-[10px] font-bold text-[#4D8B6F] bg-[#EAF3EE] rounded-md px-1.5 py-0.5 w-max" title="AI 依 Google 地圖資訊整理時提到這家；未提到不代表不符合">
-                    🔍 AI 查證有提到
+              <div className="px-2.5 py-1.5 flex flex-col flex-1 justify-center min-w-0">
+                <h3 className="font-black text-[#38312D] text-sm md:text-[13px] leading-tight truncate pr-4">{store.name}</h3>
+                <div className="flex items-center mt-1 space-x-2 text-[11px] font-bold">
+                  <span className="text-[#4D8B6F] flex items-center shrink-0">
+                    <Navigation className="w-3 h-3 mr-0.5" aria-hidden="true" />
+                    <span className="sr-only">距離</span>{store.distanceText}
                   </span>
-                )}
-                
-                <p className="text-xs text-[#A67C52] flex items-center line-clamp-1 mt-1 font-medium">
-                  <MapPin className="w-3 h-3 mr-1 text-[#B88746] shrink-0" />
-                  <span className="truncate">{store.address}</span>
-                </p>
+                  {store.rating !== null && (
+                    <span className="text-[#38312D] flex items-center shrink-0" aria-label={`Google 評分 ${store.rating} 顆星`}>
+                      <Star className="w-3 h-3 text-amber-500 fill-current mr-0.5" aria-hidden="true" />
+                      <span aria-hidden="true">{store.rating}</span>
+                    </span>
+                  )}
+                  {store.aiMentioned && (
+                    <span className="text-[10px] text-[#4D8B6F] bg-[#EAF3EE] rounded px-1 truncate" title="AI 依 Google 地圖資訊整理時提到這家；未提到不代表不符合">🔍 AI 有提到</span>
+                  )}
+                </div>
               </div>
             </div>
           ))}
