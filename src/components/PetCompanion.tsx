@@ -70,7 +70,7 @@ export default function PetCompanion({
   walkHome: { lat: number; lng: number } | null; // 散步的中心（使用者位置；沒有就用地圖中心）
 }) {
   const desktop = useIsDesktop();
-  const W = desktop ? 240 : 180; // 舞台寬（左邊另有直排的飼料欄）
+  const W = desktop ? 420 : 180; // 舞台寬：桌機加寬讓牠走得開（舞台透明，只有牠本身可以點）
   const H = desktop ? 150 : 118; // 舞台高
   const PET_H = desktop ? 112 : 88;
   // 放在地圖左下角，避開店家卡片列與推薦面板
@@ -80,7 +80,7 @@ export default function PetCompanion({
   // 桌機：照顧按鈕沿著畫面最左邊直排（標題列下方開始），毛孩站在左下、店家卡片的上方
   // 手機：照顧按鈕和毛孩放在一起，避開下方的店家卡片
   const bottom = desktop ? (hasCarousel ? 196 : hasFeatured ? 112 : 16) : (hasCarousel ? 196 : hasFeatured ? 214 : 16);
-  const left = desktop ? 92 : 10;
+  const left = desktop ? 12 : 10;
   // 桌機右側 AI 對話框開著時，中間放不下就先縮成頭像（點開時蓋在最上層）
   const chatW = chatWide ? (wide ? 400 : 340) : (wide ? 320 : 300);
   const room = desktop ? (chatOpen ? vw - 24 - chatW - 16 : vw - 24) - left : vw;
@@ -91,7 +91,7 @@ export default function PetCompanion({
   const [guest, setGuest] = useState<Stats>({ fullness: 55, cleanliness: 70, mood: 60 });
   const [minimized, setMinimized] = useState(false);
   const [pose, setPose] = useState<Pose>('idle');
-  const [x, setX] = useState(W / 2);
+  const [x, setX] = useState(60);
   const [facing, setFacing] = useState(-1);
   const [hop, setHop] = useState(0);
   const [notice, setNotice] = useState<string | null>(null); // 給飼主看的提示（不是牠在講話）
@@ -114,7 +114,7 @@ export default function PetCompanion({
 
   const stageRef = useRef<HTMLDivElement>(null);
   const petBtn = useRef<HTMLButtonElement>(null);
-  const xRef = useRef(W / 2);
+  const xRef = useRef(60);
   const busyRef = useRef(false); // 正在做一個動作（走過去吃、玩）時不接新的
   const raf = useRef<number>();
   const idSeq = useRef(1);
@@ -152,7 +152,7 @@ export default function PetCompanion({
     if (!loggedIn) { setSnap({ loggedIn: false }); return; }
     fetch('/api/vpet').then(r => (r.ok ? r.json() : null)).then(j => j && mounted.current && setSnap(j)).catch(() => {});
   }, [loggedIn]);
-  useLayoutEffect(() => { xRef.current = Math.min(Math.max(xRef.current, 50), W - 50); setX(xRef.current); }, [W]);
+  useLayoutEffect(() => { xRef.current = Math.min(Math.max(xRef.current, PET_H * 0.6), W - 50); setX(xRef.current); }, [W, PET_H]);
 
   const toggleMin = (v: boolean) => {
     setMinimized(v);
@@ -414,10 +414,10 @@ export default function PetCompanion({
     await walker.current.recall(tx, ty);
     walker.current = null;
     if (!mounted.current) return;
-    xRef.current = W / 2; setX(W / 2);
+    xRef.current = 60; setX(60);
     lastInteract.current = Date.now();
     setOut('home');
-    burst(W / 2, H - PET_H - 6, '❤', 3, 'text-[#E46B6B]');
+    burst(60, H - PET_H - 6, '❤', 3, 'text-[#E46B6B]');
     await act('belly', 1400, true); // 回到身邊開心翻肚
   };
 
@@ -433,11 +433,15 @@ export default function PetCompanion({
       const roll = Math.random();
       if (dirty && roll < 0.6) { burst(xRef.current, H - PET_H * 0.7, '💨', 2, 'text-sm opacity-70'); act('scratch', 1600); return; }
       if (lonely && roll < 0.6) { act(Math.random() < 0.5 ? 'tilt' : 'sit', 2600); return; }
-      if (roll < 0.4) walkTo(60 + Math.random() * (W - 120));
-      else if (roll < 0.6) act('sniff', 1800);
-      else if (roll < 0.8) act('sit', 2600);
+      if (roll < 0.65) {
+        // 多半在走：一段一段走，偶爾小跑步
+        const to = 60 + Math.random() * (W - 120);
+        walkTo(to, Math.random() < 0.25 ? 'run' : 'walk', Math.random() < 0.25 ? 170 : SPEED);
+      }
+      else if (roll < 0.8) act('sniff', 1600);
+      else if (roll < 0.9) act('sit', 2000);
       else setHop(h => h + 1);
-    }, 6000);
+    }, 3500);
     return () => window.clearInterval(t);
   }, [minimized, hidden, hungry, dirty, lonely, memorial, W, H, PET_H, walkTo, act, burst, out]);
 

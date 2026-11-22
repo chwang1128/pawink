@@ -313,6 +313,10 @@ export default function FullMapAIPortal() {
     { sender: 'ai', text: `想幫 ${petProfile.name} 找什麼？` }
   ]);
   
+  // 毛孩名字變了（例如登入後讀到帳號裡的毛孩），開場那句跟著換
+  useEffect(() => {
+    setMessages(m => (m.length === 1 && m[0].sender === 'ai' ? [{ ...m[0], text: `想幫 ${petProfile.name} 找什麼？` }] : m));
+  }, [petProfile.name]);
   const [inputQuery, setInputQuery] = useState('');
   const [stores, setStores] = useState<Store[]>([]);
   const [displayedStores, setDisplayedStores] = useState<Store[]>([]);
