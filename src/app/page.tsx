@@ -1220,7 +1220,7 @@ export default function FullMapAIPortal() {
       {/* 💻 電腦與手機共用對話視窗 */}
       {!isAiBoxMinimized && (
         <div className={`flex absolute bottom-[var(--kb,0px)] md:bottom-6 md:right-6 w-full ${isAiCompact ? 'md:w-[300px] lg:w-[320px]' : 'md:w-[340px] lg:w-[400px]'} z-[70] flex-col pointer-events-none animate-in slide-in-from-bottom-10`}>
-          <div className={`bg-[#FFFDF9]/95 backdrop-blur-3xl rounded-t-[32px] md:rounded-[28px] shadow-[0_-20px_48px_rgba(56,49,45,0.12)] p-5 ${isAiCompact ? 'md:p-4' : 'md:p-6'} flex flex-col h-[55vh] h-[55dvh] max-h-[calc(var(--vvh,100dvh)-16px)] ${isAiCompact ? 'md:h-[300px]' : 'md:h-[560px]'} md:max-h-[calc(100dvh-184px)] ring-1 ring-[#E8DFD8] pointer-events-auto relative overflow-hidden transition-[height] duration-300`}>
+          <div className={`bg-[#FFFDF9]/95 backdrop-blur-3xl rounded-t-[32px] md:rounded-[28px] shadow-[0_-20px_48px_rgba(56,49,45,0.12)] p-5 ${isAiCompact ? 'md:p-4' : 'md:p-6'} flex flex-col h-[55vh] h-[55dvh] max-h-[calc(var(--vvh,100dvh)-16px)] ${isAiCompact ? 'md:h-[306px]' : 'md:h-[560px]'} md:max-h-[calc(100dvh-184px)] ring-1 ring-[#E8DFD8] pointer-events-auto relative overflow-hidden transition-[height] duration-300`}>
             <div className="absolute top-0 left-0 right-0 h-40 bg-gradient-to-b from-[#B88746]/10 to-transparent pointer-events-none"></div>
             
             <div className="w-full flex justify-center pb-3 md:hidden" onClick={() => { setIsAiBoxMinimized(true); setHasOpenedAi(true); }}>
