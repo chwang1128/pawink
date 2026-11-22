@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { Walker } from '@/components/petMapWalker';
+import { WEAR, wearLayout } from '@/lib/vpet/wear';
 
 // 地圖主畫面上的毛孩分身。牠不會講話，全部用肢體動作表達：
 // - 點頭＝摸摸（瞇眼開心）；連續摸會翻肚要你摸肚子；點身體＝開心叫一聲
@@ -14,11 +15,11 @@ import type { Walker } from '@/components/petMapWalker';
 type Pose = 'idle' | 'petted' | 'eat' | 'play' | 'walk' | 'hungry' | 'sleep' | 'stretch'
   | 'sit' | 'tilt' | 'sniff' | 'belly' | 'shake' | 'beg' | 'run' | 'bark' | 'scratch';
 interface Stats { fullness: number; cleanliness: number; mood: number }
-interface VPet { id: string; name: string; species: 'dog' | 'cat'; stats: Stats; memorial: boolean; sparkle: boolean; level: number; freeFeedsLeft: number; cooldown: { pet: number; play: number; bath: number } }
+interface VPet { id: string; name: string; species: 'dog' | 'cat'; stats: Stats; memorial: boolean; sparkle: boolean; level: number; freeFeedsLeft: number; cooldown: { pet: number; play: number; bath: number }; equipped?: Record<string, string> }
 interface Snap { loggedIn: boolean; pets?: VPet[]; inventory?: Record<string, number>; points?: number; pending?: number }
 
 type ItemKind = 'food' | 'toy' | 'bath';
-interface TrayItem { key: string; sku?: string; label: string; img: string; kind: ItemKind; disabled?: string }
+interface TrayItem { key: string; sku?: string; label: string; img: string; kind: ItemKind; disabled?: string; toShop?: boolean }
 interface Drop { id: number; item: TrayItem; x: number; done?: boolean }
 interface Particle { id: number; x: number; y: number; text: string; cls?: string }
 
@@ -35,6 +36,12 @@ const PROP: Record<string, string> = {
 };
 const TOYS = ['ball', 'rope', 'plush_bone'];
 const SHOP_ICON = '/pet/shop/icon.webp';
+const WEAR_ICON = '/pet/shop/bandana_red.webp';
+const WEAR_INFO: Record<string, { name: string; short: string; slot: string }> = {
+  bandana_red: { name: '紅色領巾', short: '領巾', slot: 'neck' }, bell_collar: { name: '鈴鐺項圈', short: '項圈', slot: 'neck' },
+  round_glasses: { name: '圓框眼鏡', short: '眼鏡', slot: 'face' }, beanie: { name: '毛線帽', short: '毛線帽', slot: 'head' },
+  straw_hat: { name: '草帽', short: '草帽', slot: 'head' }, backpack: { name: '小背包', short: '背包', slot: 'back' },
+};
 const SPEED = 110; // 走路速度 px/秒
 const MIN_KEY = 'pawink_pet_min';
 // 多久沒理牠會睡著：白天 90 秒，晚上（台灣時間 22:00–07:00）50 秒
@@ -71,7 +78,7 @@ export default function PetCompanion({
   getMap: () => any; // Google 地圖物件（還沒載入時為 null）
   stores: { lat: number; lng: number; name: string }[]; // 地圖上的店家，散步時會去聞一聞
   walkHome: { lat: number; lng: number } | null; // 散步的中心（使用者位置；沒有就用地圖中心）
-  onShop: () => void; // 打開商店
+  onShop: (tab?: 'use' | 'toy' | 'wear') => void; // 打開商店（可指定分頁）
   refreshKey?: number; // 在商店買完東西後 +1，重新讀背包
 }) {
   const desktop = useIsDesktop();
@@ -106,8 +113,9 @@ export default function PetCompanion({
   const [drag, setDrag] = useState<{ item: TrayItem; x: number; y: number; moved: boolean } | null>(null);
   const [asleep, setAsleep] = useState(false);
   const [out, setOut] = useState<'home' | 'out' | 'returning'>('home');
+  const [wearBusy, setWearBusy] = useState(false);
   const [showStats, setShowStats] = useState(0); // 點牠時在頭上顯示名字與數值（時間戳）
-  const [openCat, setOpenCat] = useState<'food' | 'play' | null>(null);
+  const [openCat, setOpenCat] = useState<'food' | 'play' | 'wear' | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   // 點畫面其他地方就收起展開的分類
   useEffect(() => {
@@ -286,6 +294,7 @@ export default function PetCompanion({
     if (busyRef.current) return;
     if (out !== 'home') { tell(`${name} 出門散步了，先按「喚回」`); return; }
     if (asleepRef.current) await wake();
+    if (item.toShop) { tell(item.disabled || '到商店買'); onShop(); return; }
     if (item.disabled) { tell(item.disabled); await act('tilt', 900); return; }
     if (memorial && item.kind !== 'bath') { tell('紀念模式下不用餵食'); return; }
     lastInteract.current = Date.now();
@@ -295,7 +304,6 @@ export default function PetCompanion({
 
     // 先送出（未登入直接成功），走過去的同時等結果
     const body = !pet ? null
-      : item.kind === 'bath' && !item.sku ? { op: 'action', vpetId: pet.id, action: 'bath' }
       : item.key === 'bowl' ? { op: 'action', vpetId: pet.id, action: 'feed' }
       : item.kind === 'toy' ? (pet.cooldown.play === 0 ? { op: 'action', vpetId: pet.id, action: 'play', sku: item.sku } : null)
       : { op: 'action', vpetId: pet.id, action: 'use', sku: item.sku };
@@ -472,9 +480,30 @@ export default function PetCompanion({
   for (const sku of TOYS) {
     if (!loggedIn ? sku === 'ball' : (inv[sku] ?? 0) > 0) tray.push({ key: sku, sku, label: sku === 'ball' ? '皮球' : sku === 'rope' ? '拔河繩' : '骨頭', img: PROP[sku], kind: 'toy' });
   }
-  const bathCd = loggedIn ? (pet?.cooldown.bath ?? 0) : 0;
-  if (loggedIn && (inv.bubble_bath ?? 0) > 0) tray.push({ key: 'bubble_bath', sku: 'bubble_bath', label: `泡泡 ${inv.bubble_bath}`, img: PROP.bubble_bath, kind: 'bath' });
-  tray.push({ key: 'bath', label: '洗澡', img: PROP.bubble_bath, kind: 'bath', disabled: bathCd > 0 ? `今天洗過了，${Math.ceil(bathCd / 60)} 小時後再洗` : undefined });
+  // 洗澡＝用泡泡沐浴球，沒有泡泡就點一下去商店買
+  const bubbles = loggedIn ? inv.bubble_bath ?? 0 : 1;
+  tray.push({ key: 'bubble_bath', sku: 'bubble_bath', label: loggedIn ? `洗澡 ${bubbles}` : '洗澡', img: PROP.bubble_bath, kind: 'bath', disabled: bubbles > 0 ? undefined : '泡泡用完了，到商店買', toShop: bubbles === 0 });
+
+  // 衣櫃：買過的配件（有美術的才列），點一下穿上或脫下
+  const equipped = pet?.equipped ?? {};
+  const wearing = Object.values(equipped).filter(sku => WEAR[sku]);
+  const wardrobe = loggedIn ? Object.keys(WEAR_INFO).filter(sku => (inv[sku] ?? 0) > 0).map(sku => ({ sku, ...WEAR_INFO[sku], on: equipped[WEAR_INFO[sku].slot] === sku })) : [];
+  const toggleWear = async (sku: string, slot: string, on: boolean) => {
+    if (!pet || wearBusy) return;
+    setWearBusy(true);
+    lastInteract.current = Date.now();
+    const r = await call({ op: 'equip', vpetId: pet.id, slot, sku: on ? null : sku });
+    setWearBusy(false);
+    if (!r.ok) { tell(r.error || '換不了，等一下再試'); return; }
+    if (!on) { burst(xRef.current, H - PET_H - 6, '✨', 2, 'text-sm'); act('shake', 700, true); } // 穿好甩一甩
+  };
+
+  // 穿上的配件先把 17 個姿勢的圖層都載好，換姿勢時才不會閃一下
+  const wearKey = wearing.join(',');
+  useEffect(() => {
+    if (!wearKey) return;
+    for (const sku of wearKey.split(',')) for (const p of POSES) { const im = new Image(); im.src = `/pet/wear/${sku}/${p}.webp`; }
+  }, [wearKey]);
 
   if (hidden || (!desktop && chatOpen)) return null;
 
@@ -576,10 +605,26 @@ export default function PetCompanion({
             </div>
           );
         })}
-        <button type="button" onClick={() => { setOpenCat(null); onShop(); }} aria-label="商店：用點數買零食、玩具、穿搭" className={`${toolBtn} hover:bg-[#F7F2EA]`} style={{ width: 48 }}>
-          <span className="w-10 h-10 flex items-center justify-center"><img src={SHOP_ICON} alt="" draggable={false} className="w-8 h-8 object-contain" /></span>
-          <span className="text-[9px] font-bold leading-tight text-[#B88746]">商店</span>
-        </button>
+        <div className="relative">
+          <button type="button" onClick={() => setOpenCat(o => (o === 'wear' ? null : 'wear'))} aria-expanded={openCat === 'wear'} aria-label="服裝：幫牠穿上買來的衣服配件" className={`${toolBtn} ${openCat === 'wear' ? 'bg-[#F7F2EA]' : 'hover:bg-[#F7F2EA]'}`} style={{ width: 48 }}>
+            <span className="w-10 h-10 flex items-center justify-center"><img src={WEAR_ICON} alt="" draggable={false} className="w-8 h-8 object-contain" /></span>
+            <span className="text-[9px] font-bold leading-tight text-[#6E5A4D]">服裝</span>
+          </button>
+          {openCat === 'wear' && (
+            <div className="absolute left-full top-0 ml-1.5 flex gap-0.5 p-1 rounded-2xl bg-[#FFFDF9]/95 backdrop-blur ring-1 ring-[#E8DFD8] shadow-md animate-[petdrop_.2s_ease-out] z-10">
+              {wardrobe.map(w => (
+                <button key={w.sku} type="button" aria-pressed={w.on} disabled={wearBusy} onClick={() => toggleWear(w.sku, w.slot, w.on)} aria-label={`${w.on ? '脫下' : '穿上'}${w.name}`} className={`shrink-0 flex flex-col items-center rounded-xl px-0.5 py-0.5 ${w.on ? 'bg-[#FFF4E5] ring-1 ring-[#B88746]' : 'hover:bg-[#F7F2EA]'}`} style={{ width: 44 }}>
+                  <img src={`/pet/shop/${w.sku}.webp`} alt="" draggable={false} className="w-7 h-7 object-contain" />
+                  <span className={`text-[9px] font-bold leading-tight whitespace-nowrap ${w.on ? 'text-[#B88746]' : 'text-[#6E5A4D]'}`}>{w.on ? '脫下' : w.short}</span>
+                </button>
+              ))}
+              <button type="button" onClick={() => { setOpenCat(null); onShop('wear'); }} className="shrink-0 flex flex-col items-center justify-center rounded-xl px-0.5 hover:bg-[#F7F2EA]" style={{ width: 44 }}>
+                <img src={SHOP_ICON} alt="" draggable={false} className="w-7 h-7 object-contain" />
+                <span className="text-[9px] font-bold text-[#B88746] leading-tight">{wardrobe.length ? '買更多' : '去商店'}</span>
+              </button>
+            </div>
+          )}
+        </div>
         {out !== 'home' && (
           <button type="button" disabled={out !== 'out'} onClick={callBack} aria-label={out === 'returning' ? `${name} 跑回來了` : `喚回 ${name}`} className={`${toolBtn} mt-0.5 bg-[#FFF4E5] ring-1 ring-[#F0D9B5] hover:bg-[#FBE9CF] disabled:opacity-60 animate-[petdrop_.25s_ease-out]`} style={{ width: 48 }}>
             <span className="w-10 h-10 flex items-center justify-center"><img src={SPRITE.run} alt="" draggable={false} className={`w-9 h-9 object-contain ${out === 'out' ? 'animate-[petwalk_.32s_ease-in-out_infinite]' : ''}`} style={{ transform: 'scaleX(-1)' }} /></span>
@@ -627,13 +672,18 @@ export default function PetCompanion({
             >
               <div key={`${hop}-${pose}`} className={`w-full h-full ${['petted', 'belly', 'shake', 'stretch'].includes(pose) ? 'animate-[petsquash_.45s_ease-out]' : 'animate-[pethop_.5s_ease-out]'}`} style={{ transformOrigin: '50% 100%' }}>
                 <div className={`relative w-full h-full ${effPose === 'walk' || effPose === 'run' ? 'animate-[petwalk_.32s_ease-in-out_infinite]' : effPose === 'idle' || effPose === 'sit' || effPose === 'sleep' ? 'animate-[petidle_3s_ease-in-out_infinite]' : effPose === 'shake' ? 'animate-[petshake_.18s_linear_infinite]' : ''}`}>
-                  <img
-                    src={SPRITE[effPose]}
-                    alt=""
-                    draggable={false}
-                    className="w-full h-full object-contain object-bottom drop-shadow-[0_6px_6px_rgba(56,49,45,.18)]"
-                    style={{ transform: flip ? 'scaleX(-1)' : undefined, filter: lonely && (effPose === 'idle' || effPose === 'sit') ? 'saturate(.75)' : undefined }}
-                  />
+                  <div className="absolute inset-0" style={{ transform: flip ? 'scaleX(-1)' : undefined }}>
+                    <img
+                      src={SPRITE[effPose]}
+                      alt=""
+                      draggable={false}
+                      className="w-full h-full object-contain object-bottom drop-shadow-[0_6px_6px_rgba(56,49,45,.18)]"
+                      style={{ filter: lonely && (effPose === 'idle' || effPose === 'sit') ? 'saturate(.75)' : undefined }}
+                    />
+                    {wearLayout(effPose, wearing, PET_H * 1.2, PET_H).map(l => (
+                      <img key={l.sku} src={l.img} alt="" draggable={false} className="absolute pointer-events-none max-w-none" style={{ left: l.left, top: l.top, width: l.width, height: l.height }} />
+                    ))}
+                  </div>
                   {dirty && effPose !== 'sleep' && (
                     <>
                       <span className="absolute left-[34%] top-[58%] w-4 h-3 rounded-full bg-[#7A5A3A]/45 blur-[1px]" aria-hidden="true" />
@@ -707,13 +757,18 @@ export default function PetCompanion({
             >
               <div key={`${hop}-${pose}`} className={`w-full h-full ${['petted', 'belly', 'shake', 'stretch'].includes(pose) ? 'animate-[petsquash_.45s_ease-out]' : 'animate-[pethop_.5s_ease-out]'}`} style={{ transformOrigin: '50% 100%' }}>
                 <div className={`relative w-full h-full ${effPose === 'walk' || effPose === 'run' ? 'animate-[petwalk_.32s_ease-in-out_infinite]' : effPose === 'idle' || effPose === 'sit' || effPose === 'sleep' ? 'animate-[petidle_3s_ease-in-out_infinite]' : effPose === 'shake' ? 'animate-[petshake_.18s_linear_infinite]' : ''}`}>
-                  <img
-                    src={SPRITE[effPose]}
-                    alt=""
-                    draggable={false}
-                    className="w-full h-full object-contain object-bottom drop-shadow-[0_6px_6px_rgba(56,49,45,.18)]"
-                    style={{ transform: flip ? 'scaleX(-1)' : undefined, filter: lonely && (effPose === 'idle' || effPose === 'sit') ? 'saturate(.75)' : undefined }}
-                  />
+                  <div className="absolute inset-0" style={{ transform: flip ? 'scaleX(-1)' : undefined }}>
+                    <img
+                      src={SPRITE[effPose]}
+                      alt=""
+                      draggable={false}
+                      className="w-full h-full object-contain object-bottom drop-shadow-[0_6px_6px_rgba(56,49,45,.18)]"
+                      style={{ filter: lonely && (effPose === 'idle' || effPose === 'sit') ? 'saturate(.75)' : undefined }}
+                    />
+                    {wearLayout(effPose, wearing, PET_H * 1.2, PET_H).map(l => (
+                      <img key={l.sku} src={l.img} alt="" draggable={false} className="absolute pointer-events-none max-w-none" style={{ left: l.left, top: l.top, width: l.width, height: l.height }} />
+                    ))}
+                  </div>
                   {dirty && effPose !== 'sleep' && (
                     <>
                       <span className="absolute left-[34%] top-[58%] w-4 h-3 rounded-full bg-[#7A5A3A]/45 blur-[1px]" aria-hidden="true" />

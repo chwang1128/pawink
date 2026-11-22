@@ -195,6 +195,7 @@ export default function FullMapAIPortal() {
   // 確認中的點數（飼主回報後 7 天才入帳）
   const [pendingCoins, setPendingCoins] = useState(0);
   const [shopOpen, setShopOpen] = useState(false);
+  const [shopTab, setShopTab] = useState<'use' | 'toy' | 'wear' | undefined>(undefined);
   // 新的搜尋結果出來時，卡片列捲回最左邊（不然會停在上一次滑到的位置，第一張被切掉）
   const cardRowRef = useRef<HTMLDivElement>(null);
   const [petRefresh, setPetRefresh] = useState(0);
@@ -1214,13 +1215,14 @@ export default function FullMapAIPortal() {
           getMap={() => mapRef.current}
           stores={displayedStores.map(st => ({ lat: st.lat, lng: st.lng, name: st.name }))}
           walkHome={userLocation}
-          onShop={() => setShopOpen(true)}
+          onShop={tab => { setShopTab(tab); setShopOpen(true); }}
           refreshKey={petRefresh}
         />
       )}
       {/* 毛孩商店：從左邊工具列的「商店」打開 */}
       <PetShop
         open={shopOpen}
+        initialTab={shopTab}
         onClose={() => setShopOpen(false)}
         onLogin={() => signIn('google')}
         onBought={(p, pending) => { setCoins(p); setPendingCoins(pending); setPetRefresh(n => n + 1); }}
