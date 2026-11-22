@@ -1191,6 +1191,9 @@ export default function FullMapAIPortal() {
           chatOpen={!isAiBoxMinimized}
           onPoints={(p, pending) => { setCoins(p); setPendingCoins(pending); }}
           onLogin={() => signIn('google')}
+          getMap={() => mapRef.current}
+          stores={displayedStores.map(st => ({ lat: st.lat, lng: st.lng, name: st.name }))}
+          walkHome={userLocation}
         />
       )}
 
