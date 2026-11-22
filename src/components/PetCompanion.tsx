@@ -498,6 +498,13 @@ export default function PetCompanion({
     if (!on) { burst(xRef.current, H - PET_H - 6, '✨', 2, 'text-sm'); act('shake', 700, true); } // 穿好甩一甩
   };
 
+  // 穿上的配件先把 17 個姿勢的圖層都載好，換姿勢時才不會閃一下
+  const wearKey = wearing.join(',');
+  useEffect(() => {
+    if (!wearKey) return;
+    for (const sku of wearKey.split(',')) for (const p of POSES) { const im = new Image(); im.src = `/pet/wear/${sku}/${p}.webp`; }
+  }, [wearKey]);
+
   if (hidden || (!desktop && chatOpen)) return null;
 
   // ---- 縮小 ----
