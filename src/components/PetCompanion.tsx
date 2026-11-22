@@ -674,7 +674,7 @@ export default function PetCompanion({
                       style={{ filter: lonely && (effPose === 'idle' || effPose === 'sit') ? 'saturate(.75)' : undefined }}
                     />
                     {wearLayout(effPose, wearing, PET_H * 1.2, PET_H).map(l => (
-                      <img key={l.sku} src={l.img} alt="" draggable={false} className="absolute pointer-events-none max-w-none" style={{ left: l.left, top: l.top, width: l.width, height: l.height, transform: `rotate(${l.rotate}deg)`, transformOrigin: l.origin }} />
+                      <img key={l.sku} src={l.img} alt="" draggable={false} className="absolute pointer-events-none max-w-none" style={{ left: l.left, top: l.top, width: l.width, height: l.height }} />
                     ))}
                   </div>
                   {dirty && effPose !== 'sleep' && (
@@ -759,7 +759,7 @@ export default function PetCompanion({
                       style={{ filter: lonely && (effPose === 'idle' || effPose === 'sit') ? 'saturate(.75)' : undefined }}
                     />
                     {wearLayout(effPose, wearing, PET_H * 1.2, PET_H).map(l => (
-                      <img key={l.sku} src={l.img} alt="" draggable={false} className="absolute pointer-events-none max-w-none" style={{ left: l.left, top: l.top, width: l.width, height: l.height, transform: `rotate(${l.rotate}deg)`, transformOrigin: l.origin }} />
+                      <img key={l.sku} src={l.img} alt="" draggable={false} className="absolute pointer-events-none max-w-none" style={{ left: l.left, top: l.top, width: l.width, height: l.height }} />
                     ))}
                   </div>
                   {dirty && effPose !== 'sleep' && (
