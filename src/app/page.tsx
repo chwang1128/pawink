@@ -26,6 +26,9 @@ const VISIT_MIN_AWAY_MS = 15 * 60_000; // 離開不到 15 分鐘就回來，多�
 const VISIT_MAX_AGE_MS = 7 * 86_400_000; // 超過 7 天就不問了
 const ASK_AGAIN_MS = 30 * 86_400_000; // 同一家店 30 天內只問一次
 
+// 從地址取出行政區，例如「106臺北市大安區仁慈里…」→「大安區」
+const districtOf = (address: string | null | undefined) => (address || '').match(/[市縣]([^市縣\d]{1,3}?[區鄉鎮市])/)?.[1] ?? '';
+
 function readJson<T>(key: string): T | null {
   try { const v = window.localStorage.getItem(key); return v ? (JSON.parse(v) as T) : null; } catch { return null; }
 }
@@ -1468,16 +1471,18 @@ export default function FullMapAIPortal() {
                     </button>
                   </h3>
                   <div className="flex items-center mt-1.5 space-x-2 text-[11px] font-bold">
-                    <span className="text-[#4D8B6F] flex items-center">
+                    <span className="text-[#4D8B6F] flex items-center shrink-0">
                       <Navigation className="w-3 h-3 mr-0.5" aria-hidden="true" />
                       <span className="sr-only">距離</span>{store.distanceText}
                     </span>
                     {store.rating !== null && (
-                      <span className="text-[#38312D] flex items-center" aria-label={`Google 評分 ${store.rating} 顆星`}>
+                      <span className="text-[#38312D] flex items-center shrink-0" aria-label={`Google 評分 ${store.rating} 顆星`}>
                         <Star className="w-3 h-3 text-amber-500 fill-current mr-0.5" aria-hidden="true" />
                         <span aria-hidden="true">{store.rating}</span>
                       </span>
                     )}
+                    {/* 只留行政區，連鎖店才分得出是哪一家；完整地址在店家詳情 */}
+                    {districtOf(store.address) && <span className="text-[#A67C52] font-medium truncate">{districtOf(store.address)}</span>}
                   </div>
                 </div>
               </li>
