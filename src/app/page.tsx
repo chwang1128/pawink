@@ -1518,9 +1518,6 @@ export default function FullMapAIPortal() {
                   <MapPin className="w-4 h-4 mr-2.5 text-[#B88746] mt-0.5 shrink-0" />
                   <span className="leading-relaxed">{selectedDetailStore.address}</span>
                 </div>
-                <div className="flex justify-end -mt-1">
-                  <GoogleMapsAttribution />
-                </div>
                 {isDetailsLoading && !selectedDetailStore.details && (
                   <div className="text-xs text-[#A67C52] font-medium pl-6">正在讀取營業時間與 Google 評論…</div>
                 )}
@@ -1553,6 +1550,8 @@ export default function FullMapAIPortal() {
                     <span>{selectedDetailStore.details?.website ? '前往店家官方網站' : '在 Google 地圖查看'}</span>
                     <ExternalLink className="w-3 h-3 ml-0.5 inline" />
                   </a>
+                  {/* Google 規定：顯示 Google 地點資料時要標示來源 */}
+                  <span className="ml-auto pl-3 shrink-0"><GoogleMapsAttribution /></span>
                 </div>
               </div>
 
