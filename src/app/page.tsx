@@ -1272,7 +1272,7 @@ export default function FullMapAIPortal() {
                       key={q}
                       type="button"
                       onClick={() => handleSendMessage(q)}
-                      className="text-xs font-bold text-[#8A6A3E] bg-[#F7F2EA] hover:bg-[#EFE5D8] ring-1 ring-[#E8DFD8] rounded-full px-3 py-1.5 active:scale-95"
+                      className="text-[11px] font-bold text-[#8A6A3E] bg-[#F7F2EA] hover:bg-[#EFE5D8] ring-1 ring-[#E8DFD8] rounded-full px-2.5 py-1.5 whitespace-nowrap active:scale-95"
                     >
                       {q}
                     </button>
