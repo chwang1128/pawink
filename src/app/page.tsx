@@ -12,6 +12,27 @@ import { SERVICE_CATEGORIES, type ServiceCategoryKey } from '@/lib/service-categ
 import type { GroundingResult } from '@/lib/grounding';
 import GroundedAnswer, { GroundingLoading } from '@/components/GroundedAnswer';
 import OwnerReports from '@/components/OwnerReports';
+import ReportPrompt, { type VisitStore } from '@/components/ReportPrompt';
+
+// 按過導航或通話的店家，回到網站時問一次「你最近去過嗎？」
+const VISIT_KEY = 'pawink_visit_intent';
+const ASKED_KEY = 'pawink_report_asked';
+const VISIT_MIN_AWAY_MS = 20_000; // 離開不到 20 秒就回來，多半是誤按，先不問
+const VISIT_MAX_AGE_MS = 7 * 86_400_000; // 超過 7 天就不問了
+const ASK_AGAIN_MS = 30 * 86_400_000; // 同一家店 30 天內只問一次
+
+function readJson<T>(key: string): T | null {
+  try { const v = window.localStorage.getItem(key); return v ? (JSON.parse(v) as T) : null; } catch { return null; }
+}
+function writeJson(key: string, value: unknown) {
+  try { window.localStorage.setItem(key, JSON.stringify(value)); } catch { /* 無痕模式等情況，略過 */ }
+}
+function removeKey(key: string) {
+  try { window.localStorage.removeItem(key); } catch { /* 略過 */ }
+}
+function isVisitStore(v: any): v is VisitStore & { at: number } {
+  return v && typeof v.id === 'string' && typeof v.name === 'string' && Number.isFinite(v.lat) && Number.isFinite(v.lng) && Number.isFinite(v.at);
+}
 
 interface PetProfile {
   name: string;
@@ -295,6 +316,42 @@ export default function FullMapAIPortal() {
   const [isAiTyping, setIsAiTyping] = useState(false); 
   
   const [selectedDetailStore, setSelectedDetailStore] = useState<Store | null>(null);
+  const [reportPrompt, setReportPrompt] = useState<{ store: VisitStore; stage: 'ask' | 'form' } | null>(null);
+  const [reportsRefresh, setReportsRefresh] = useState(0);
+
+  // 記下按過導航或通話的店家
+  const rememberVisit = (store: Store) => {
+    writeJson(VISIT_KEY, { id: store.id, name: store.name, primaryType: store.primaryType ?? null, lat: store.lat, lng: store.lng, locToken: store.locToken, at: Date.now() });
+  };
+
+  // 回到網站（或下次打開）時，問一次
+  useEffect(() => {
+    const check = () => {
+      if (document.visibilityState !== 'visible') return;
+      const v = readJson<unknown>(VISIT_KEY);
+      if (!isVisitStore(v)) { if (v) removeKey(VISIT_KEY); return; }
+      const age = Date.now() - v.at;
+      if (age > VISIT_MAX_AGE_MS) { removeKey(VISIT_KEY); return; }
+      if (age < VISIT_MIN_AWAY_MS) return;
+      removeKey(VISIT_KEY);
+      const asked = readJson<Record<string, number>>(ASKED_KEY) || {};
+      if (asked[v.id] && Date.now() - asked[v.id] < ASK_AGAIN_MS) return;
+      // 只保留 30 天內的紀錄，避免越存越多
+      const kept = Object.fromEntries(Object.entries(asked).filter(([, t]) => typeof t === 'number' && Date.now() - t < ASK_AGAIN_MS));
+      writeJson(ASKED_KEY, { ...kept, [v.id]: Date.now() });
+      const { at: _at, ...store } = v;
+      setReportPrompt(prev => prev ?? { store, stage: 'ask' });
+    };
+    check();
+    document.addEventListener('visibilitychange', check);
+    window.addEventListener('pageshow', check);
+    return () => {
+      document.removeEventListener('visibilitychange', check);
+      window.removeEventListener('pageshow', check);
+    };
+  }, []);
+
+  const closeReportPrompt = () => { setReportPrompt(null); setReportsRefresh(n => n + 1); };
   const [isDetailsLoading, setIsDetailsLoading] = useState(false);
   const [expandedReviews, setExpandedReviews] = useState<Set<number>>(new Set());
   const [notice, setNotice] = useState<string | null>(null);
@@ -923,6 +980,7 @@ export default function FullMapAIPortal() {
 
   const handleNavigate = () => {
     if (selectedDetailStore) {
+      rememberVisit(selectedDetailStore);
       window.open(`https://www.google.com/maps/dir/?api=1&destination=${selectedDetailStore.lat},${selectedDetailStore.lng}`, '_blank');
     }
   };
@@ -1472,13 +1530,18 @@ export default function FullMapAIPortal() {
               </div>
 
               <OwnerReports
+                variant="summary"
                 placeId={selectedDetailStore.id}
                 primaryType={selectedDetailStore.primaryType}
                 name={selectedDetailStore.name}
                 place={{ lat: selectedDetailStore.lat, lng: selectedDetailStore.lng, token: selectedDetailStore.locToken }}
                 here={userLocation}
-                onPoints={(p, pending) => { setCoins(p); setPendingCoins(pending); }}
+                refreshKey={reportsRefresh}
                 onLogin={() => signIn('google')}
+                onOpenForm={() => setReportPrompt({
+                  store: { id: selectedDetailStore.id, name: selectedDetailStore.name, primaryType: selectedDetailStore.primaryType ?? null, lat: selectedDetailStore.lat, lng: selectedDetailStore.lng, locToken: selectedDetailStore.locToken },
+                  stage: 'form',
+                })}
               />
 
               {selectedDetailStore.details && selectedDetailStore.details.reviews.length > 0 && (
@@ -1545,6 +1608,7 @@ export default function FullMapAIPortal() {
               {selectedDetailStore.details?.phone ? (
                 <a 
                   href={telHref(selectedDetailStore.details.phone)}
+                  onClick={() => rememberVisit(selectedDetailStore)}
                   className="flex-1 bg-[#F7F2EA] hover:bg-[#E8DFD8] text-[#38312D] font-black text-xs sm:text-sm py-3 rounded-2xl flex items-center justify-center transition-all active:scale-95"
                 >
                   <Phone className="w-3.5 h-3.5 mr-1 text-blue-600" />
@@ -1799,6 +1863,19 @@ export default function FullMapAIPortal() {
             </p>
           </div>
         </div>
+      )}
+
+      {/* 幫忙回報視窗 */}
+      {reportPrompt && (
+        <ReportPrompt
+          store={reportPrompt.store}
+          stage={reportPrompt.stage}
+          here={userLocation}
+          onStage={stage => setReportPrompt(prev => (prev ? { ...prev, stage } : prev))}
+          onClose={closeReportPrompt}
+          onPoints={(p, pending) => { setCoins(p); setPendingCoins(pending); }}
+          onLogin={() => signIn('google')}
+        />
       )}
 
       {/* 定位被拒絕 UI */}

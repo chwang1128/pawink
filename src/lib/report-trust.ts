@@ -2,11 +2,11 @@
 //
 // - 只統計近 12 個月的回報
 // - 每票有權重：新帳號（註冊未滿 7 天）或回報常被多數推翻的人權重較低；現場回報權重較高
-// - 至少 3 人回報才給結論；加權後一方占 2/3 以上才算「多數」，否則「意見分歧」
+// - 至少 MIN_REPORTS_FOR_CONCLUSION 人回報才給結論；加權後一方占 2/3 以上才算「多數」，否則「意見分歧」
 // - 點數先「確認中」，7 天後結算：只要相反答案沒有形成多數（2/3），就入帳；
 //   回報人數不足或意見分歧都算入帳，避免冷門店家的回報者永遠拿不到點
 import type { Prisma, PrismaClient } from '@prisma/client';
-import { ANON_WEIGHT, FLAG_WINDOW_DAYS, FLAGS_TO_WARN, MIN_REPORTS_FOR_CONCLUSION, ON_SITE_WEIGHT, REPORT_WINDOW_DAYS, SETTLE_BATCH } from '@/lib/report-questions';
+import { ANON_WEIGHT, FLAG_WINDOW_DAYS, FLAGS_TO_WARN, MIN_REPORTS_FOR_CONCLUSION, MIN_REPORTS_TO_OVERTURN, ON_SITE_WEIGHT, REPORT_WINDOW_DAYS, SETTLE_BATCH } from '@/lib/report-questions';
 
 type Db = PrismaClient | Prisma.TransactionClient;
 const DAY = 86_400_000;
@@ -97,7 +97,9 @@ export async function settlePendingPoints(db: PrismaClient, userId: string): Pro
     let ok = !!report;
     if (report) {
       const t = (await tallyFor(db, report.placeId, [report.question]))[report.question];
-      const overturned = (report.answer && t.verdict === 'no') || (!report.answer && t.verdict === 'yes');
+      // 人數夠多時，相反答案形成多數才算被推翻
+      const enough = t.yes + t.no >= MIN_REPORTS_TO_OVERTURN;
+      const overturned = enough && ((report.answer && t.verdict === 'no') || (!report.answer && t.verdict === 'yes'));
       ok = !overturned;
     }
     await db.$transaction(async (tx) => {
