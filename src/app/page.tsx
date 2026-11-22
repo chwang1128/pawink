@@ -12,6 +12,10 @@ import { SERVICE_CATEGORIES, type ServiceCategoryKey } from '@/lib/service-categ
 import type { GroundingResult } from '@/lib/grounding';
 import GroundedAnswer, { GroundingLoading } from '@/components/GroundedAnswer';
 import OwnerReports from '@/components/OwnerReports';
+import dynamic from 'next/dynamic';
+
+// 毛孩分身晚一點載入，不拖慢地圖
+const PetCompanion = dynamic(() => import('@/components/PetCompanion'), { ssr: false });
 import ReportPrompt, { type VisitStore } from '@/components/ReportPrompt';
 import { POINTS_PER_REPORT } from '@/lib/report-questions';
 
@@ -191,6 +195,8 @@ export default function FullMapAIPortal() {
   const [pendingCoins, setPendingCoins] = useState(0);
   // 預設收起，避免手機先閃出對話框；桌面版掛載後再展開
   const [isAiBoxMinimized, setIsAiBoxMinimized] = useState(true);
+  // 桌機預設開一個小對話框；飼主開始對話或按放大才變大
+  const [isAiCompact, setIsAiCompact] = useState(true);
   // 手機搜尋後對話框會收起讓出地圖；把 AI 這次的提醒留在按鈕旁，避免看不到（例如誤食時的處置）
   const [aiPeek, setAiPeek] = useState<string | null>(null);
   const [hasOpenedAi, setHasOpenedAi] = useState(false);
@@ -386,7 +392,7 @@ export default function FullMapAIPortal() {
   const [hasMounted, setHasMounted] = useState(false);
   useEffect(() => {
     setHasMounted(true);
-    // 手機上 AI 對話框會蓋住下半個畫面，維持收起讓附近店家版位露出；桌面版直接展開
+    // 手機上 AI 對話框會蓋住下半個畫面，維持收起；桌機預設開一個小對話框
     if (window.innerWidth >= 768) setIsAiBoxMinimized(false);
 
     // 手機鍵盤：iOS 開鍵盤時版面高度不變、只有可視區變小，要自己算出鍵盤高度，
@@ -814,6 +820,7 @@ export default function FullMapAIPortal() {
     setMessages(newHistory);
     setInputQuery('');
     setIsAiTyping(true);
+    setIsAiCompact(false);
 
     try {
       const chatRes = await fetch('/api/chat', {
@@ -1176,17 +1183,22 @@ export default function FullMapAIPortal() {
         <LocateFixed className="w-5 h-5 md:w-6 md:h-6" />
       </button>
 
-      {/* 毛孩樂園入口（登入後顯示） */}
-      {authStatus === 'authenticated' && (
-        <a
-          href="/pet"
-          title="毛孩樂園：用點數養你的毛孩分身"
-          aria-label="毛孩樂園"
-          className="absolute top-[136px] right-3 md:top-[152px] md:right-5 z-20 bg-[#FFF4E5]/95 backdrop-blur-xl shadow-[0_8px_24px_rgba(56,49,45,0.12)] rounded-full w-[46px] h-[46px] md:w-[52px] md:h-[52px] flex flex-col items-center justify-center ring-1 ring-[#F0D9B5] active:scale-95 transition-all"
-        >
-          <span className="text-xl leading-none" aria-hidden="true">{petProfile.type === 'cat' ? '🐱' : '🐶'}</span>
-          <span className="text-[9px] font-black text-[#B88746] leading-none mt-0.5">樂園</span>
-        </a>
+      {/* 毛孩分身：直接站在地圖左下角，可以點、可以拖東西餵牠 */}
+      {hasMounted && (
+        <PetCompanion
+          loggedIn={authStatus === 'authenticated'}
+          guestName={petProfile.name || '毛孩'}
+          hidden={!!selectedDetailStore || isPetModalOpen}
+          hasCarousel={displayedStores.length > 0}
+          hasFeatured={featuredStores.length > 0 && displayedStores.length === 0}
+          chatOpen={!isAiBoxMinimized}
+          chatWide={!isAiCompact}
+          onPoints={(p, pending) => { setCoins(p); setPendingCoins(pending); }}
+          onLogin={() => signIn('google')}
+          getMap={() => mapRef.current}
+          stores={displayedStores.map(st => ({ lat: st.lat, lng: st.lng, name: st.name }))}
+          walkHome={userLocation}
+        />
       )}
 
       {showSearchHereBtn && (
@@ -1203,8 +1215,8 @@ export default function FullMapAIPortal() {
 
       {/* 💻 電腦與手機共用對話視窗 */}
       {!isAiBoxMinimized && (
-        <div className="flex absolute bottom-[var(--kb,0px)] md:bottom-6 md:right-6 w-full md:w-[340px] lg:w-[400px] z-[70] flex-col pointer-events-none animate-in slide-in-from-bottom-10">
-          <div className="bg-[#FFFDF9]/95 backdrop-blur-3xl rounded-t-[32px] md:rounded-[32px] shadow-[0_-20px_48px_rgba(56,49,45,0.12)] p-5 md:p-6 flex flex-col h-[55vh] h-[55dvh] max-h-[calc(var(--vvh,100dvh)-16px)] md:h-[560px] md:max-h-[calc(100dvh-184px)] ring-1 ring-[#E8DFD8] pointer-events-auto relative overflow-hidden">
+        <div className={`flex absolute bottom-[var(--kb,0px)] md:bottom-6 md:right-6 w-full ${isAiCompact ? 'md:w-[300px] lg:w-[320px]' : 'md:w-[340px] lg:w-[400px]'} z-[70] flex-col pointer-events-none animate-in slide-in-from-bottom-10`}>
+          <div className={`bg-[#FFFDF9]/95 backdrop-blur-3xl rounded-t-[32px] md:rounded-[28px] shadow-[0_-20px_48px_rgba(56,49,45,0.12)] p-5 ${isAiCompact ? 'md:p-4' : 'md:p-6'} flex flex-col h-[55vh] h-[55dvh] max-h-[calc(var(--vvh,100dvh)-16px)] ${isAiCompact ? 'md:h-[300px]' : 'md:h-[560px]'} md:max-h-[calc(100dvh-184px)] ring-1 ring-[#E8DFD8] pointer-events-auto relative overflow-hidden transition-[height] duration-300`}>
             <div className="absolute top-0 left-0 right-0 h-40 bg-gradient-to-b from-[#B88746]/10 to-transparent pointer-events-none"></div>
             
             <div className="w-full flex justify-center pb-3 md:hidden" onClick={() => { setIsAiBoxMinimized(true); setHasOpenedAi(true); }}>
@@ -1217,9 +1229,17 @@ export default function FullMapAIPortal() {
             >
               <X className="w-5 h-5" />
             </button>
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); setIsAiCompact(c => !c); }}
+              aria-label={isAiCompact ? '放大對話框' : '縮小對話框'}
+              className="hidden md:flex absolute top-5 right-16 text-[#A67C52] hover:text-[#38312D] bg-white/60 hover:bg-white shadow-sm p-2 rounded-full z-[100] transition-all ring-1 ring-black/5"
+            >
+              {isAiCompact ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+            </button>
             
-            <div className="flex items-center space-x-3.5 mb-4 md:mb-6 relative z-10 shrink-0">
-              <div className="w-12 h-12 rounded-[18px] bg-[#B88746] text-white flex items-center justify-center shadow-lg shadow-[#B88746]/25">
+            <div className={`flex items-center space-x-3.5 mb-4 ${isAiCompact ? 'md:mb-2' : 'md:mb-6'} relative z-10 shrink-0`}>
+              <div className={`${isAiCompact ? 'w-12 h-12 md:w-9 md:h-9 md:rounded-[14px]' : 'w-12 h-12'} rounded-[18px] bg-[#B88746] text-white flex items-center justify-center shadow-lg shadow-[#B88746]/25`}>
                 <Sparkles className="w-6 h-6" />
               </div>
               <div>
