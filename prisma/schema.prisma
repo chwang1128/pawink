@@ -160,15 +160,17 @@ model UsageCounter {
 model PlaceReport {
   id        String   @id @default(uuid())
   placeId   String
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // 登入者的回報有 userId；未登入的回報為空，靠 voterKey（瀏覽器識別碼）限制一人一票
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  voterKey  String   // 登入者為 u:<userId>，未登入為 a:<瀏覽器識別碼>
   question  String
   answer    Boolean
   onSite    Boolean  @default(false) // 回報時人在店家附近（只比對距離，不保存位置）
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@unique([placeId, userId, question])
+  @@unique([placeId, voterKey, question])
   @@index([placeId])
 }
 

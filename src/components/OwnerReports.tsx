@@ -45,9 +45,9 @@ export default function OwnerReports({
     return () => { alive = false; };
   }, [placeId, kind]);
 
+  const [askLogin, setAskLogin] = useState(false);
   const send = async (question: string, payload: Record<string, unknown>) => {
-    if (!data?.loggedIn) { onLogin(); return null; }
-    if (busy) return null;
+    if (!data || busy) return null;
     setBusy(question);
     try {
       const res = await fetch('/api/place-reports', {
@@ -69,6 +69,7 @@ export default function OwnerReports({
   };
 
   const flag = async (question: string) => {
+    if (!data?.loggedIn) { onLogin(); return; }
     const j = await send(question, { action: 'flag' });
     if (j) setNote('謝謝反映，其他飼主會看到「可能已改變」的提醒');
   };
@@ -78,6 +79,7 @@ export default function OwnerReports({
     if (!j) return;
     {
       const site = j.onSite ? '（現場回報）' : '';
+      if (!j.loggedIn) { setNote(`已記錄${site}，謝謝分享！`); setAskLogin(true); return; }
       if (j.awarded > 0) setNote(`謝謝回報${site}！${j.awarded} 點確認中，${POINTS_PENDING_DAYS} 天後入帳`);
       else if (j.capped) setNote(`已記錄${site}。今天回報的點數已達 ${DAILY_REPORT_POINTS_CAP} 點上限，明天再領`);
       else setNote(`已更新你的回答${site}`);
@@ -94,7 +96,7 @@ export default function OwnerReports({
       </h3>
       <p className="text-[10px] text-[#8C7A6B] mb-2.5">
         來自 Pawink 飼主的親身經驗，只統計近 12 個月，僅供參考，不代表店家或 Pawink 認證。
-        {data && !data.loggedIn ? ` 登入後回報每題可得 ${POINTS_PER_REPORT} 點。` : ` 第一次回報每題 ${POINTS_PER_REPORT} 點（${POINTS_PENDING_DAYS} 天後入帳），每天最多 ${DAILY_REPORT_POINTS_CAP} 點。`}
+        {data && !data.loggedIn ? ` 不登入也能回報；登入後每題可得 ${POINTS_PER_REPORT} 點。` : ` 第一次回報每題 ${POINTS_PER_REPORT} 點（${POINTS_PENDING_DAYS} 天後入帳），每天最多 ${DAILY_REPORT_POINTS_CAP} 點。`}
       </p>
 
       {!data ? (
@@ -148,14 +150,14 @@ export default function OwnerReports({
         </div>
       )}
       {note && <p className="text-[11px] font-bold text-[#4D8B6F] mt-2" role="status">{note}</p>}
-      <p className="mt-2 text-[10px] text-[#8C7A6B]">
-        不確定的題目可以略過不答。店家資訊有誤？
-        <a href="mailto:aipawink@gmail.com?subject=Pawink%20%E9%A3%BC%E4%B8%BB%E5%9B%9E%E5%A0%B1%E8%B3%87%E8%A8%8A%E6%9B%B4%E6%AD%A3" className="underline ml-0.5">告訴我們</a>
-      </p>
+      <p className="mt-2 text-[10px] text-[#8C7A6B]">不確定的題目可以略過不答。</p>
       {data && !data.loggedIn && (
-        <button type="button" onClick={onLogin} className="mt-2 text-[11px] font-bold text-[#B88746] underline">
-          登入後回報（註冊送 100 點）
-        </button>
+        <div className={`mt-2 rounded-xl px-3 py-2 ${askLogin ? 'bg-[#FFF4E5] ring-1 ring-[#F0D9B5]' : ''}`}>
+          {askLogin && <p className="text-[11px] text-[#38312D] mb-1">登入後回報，每題可得 {POINTS_PER_REPORT} 點，剛剛的回報也會存到你的帳號。</p>}
+          <button type="button" onClick={onLogin} className="text-[11px] font-bold text-[#B88746] underline">
+            登入領點數（註冊送 100 點）
+          </button>
+        </div>
       )}
     </div>
   );

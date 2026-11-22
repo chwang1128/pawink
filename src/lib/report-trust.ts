@@ -6,7 +6,7 @@
 // - 點數先「確認中」，7 天後結算：只要相反答案沒有形成多數（2/3），就入帳；
 //   回報人數不足或意見分歧都算入帳，避免冷門店家的回報者永遠拿不到點
 import type { Prisma, PrismaClient } from '@prisma/client';
-import { FLAG_WINDOW_DAYS, FLAGS_TO_WARN, MIN_REPORTS_FOR_CONCLUSION, ON_SITE_WEIGHT, REPORT_WINDOW_DAYS, SETTLE_BATCH } from '@/lib/report-questions';
+import { ANON_WEIGHT, FLAG_WINDOW_DAYS, FLAGS_TO_WARN, MIN_REPORTS_FOR_CONCLUSION, ON_SITE_WEIGHT, REPORT_WINDOW_DAYS, SETTLE_BATCH } from '@/lib/report-questions';
 
 type Db = PrismaClient | Prisma.TransactionClient;
 const DAY = 86_400_000;
@@ -60,14 +60,14 @@ export async function tallyFor(db: Db, placeId: string, keys: string[]): Promise
     _count: { _all: true },
   });
   const flagCount = new Map(flags.map(f => [f.question, f._count._all]));
-  const weights = await voterWeights(db, Array.from(new Set(rows.map(r => r.userId))));
+  const weights = await voterWeights(db, Array.from(new Set(rows.map(r => r.userId).filter((u): u is string => !!u))));
 
   const out: Record<string, QuestionTally> = {};
   for (const k of keys) {
     const rs = rows.filter(r => r.question === k);
     let wYes = 0, wNo = 0, lastAt: string | null = null;
     for (const r of rs) {
-      const w = (weights.get(r.userId) ?? 1) * (r.onSite ? ON_SITE_WEIGHT : 1);
+      const w = (r.userId ? (weights.get(r.userId) ?? 1) : ANON_WEIGHT) * (r.onSite ? ON_SITE_WEIGHT : 1);
       if (r.answer) wYes += w; else wNo += w;
       const at = r.updatedAt.toISOString();
       if (!lastAt || at > lastAt) lastAt = at;
@@ -113,4 +113,18 @@ export async function pointsSummary(db: PrismaClient, userId: string) {
   const me = await db.user.findUnique({ where: { id: userId }, select: { points: true } });
   const pending = await db.pointLedger.aggregate({ where: { userId, status: 'pending' }, _sum: { amount: true } });
   return { points: me?.points ?? 0, pending: pending._sum.amount ?? 0 };
+}
+
+// 未登入時的回報，在登入後移到帳號底下（不補發點數）。已用帳號回答過的同一題，以帳號的答案為準。
+export async function adoptAnonReports(db: PrismaClient, userId: string, anonId: string | null | undefined): Promise<number> {
+  if (!anonId) return 0;
+  const anonKey = `a:${anonId}`;
+  const rows = await db.placeReport.findMany({ where: { voterKey: anonKey }, select: { id: true, placeId: true, question: true } });
+  let moved = 0;
+  for (const r of rows) {
+    const taken = await db.placeReport.findUnique({ where: { placeId_voterKey_question: { placeId: r.placeId, voterKey: `u:${userId}`, question: r.question } } });
+    if (taken) await db.placeReport.delete({ where: { id: r.id } });
+    else { await db.placeReport.update({ where: { id: r.id }, data: { userId, voterKey: `u:${userId}` } }); moved++; }
+  }
+  return moved;
 }

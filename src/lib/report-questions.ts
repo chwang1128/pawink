@@ -84,3 +84,6 @@ export const ON_SITE_WEIGHT = 1.3; // 現場回報的加權（座標仍可能被
 export const REFRESH_SAME_ANSWER_DAYS = 30; // 同一答案隔多久再按一次，才算「最近仍然如此」
 export const FLAG_MIN_ACCOUNT_DAYS = 7; // 註冊滿幾天才能反映「可能已改變」
 export const SETTLE_BATCH = 10; // 每次最多結算幾筆確認中點數
+export const ANON_WEIGHT = 0.3; // 未登入回報的權重
+export const ANON_REPORTS_PER_IP_DAILY = 60; // 未登入回報：每個 IP 每天上限
+export const ANON_COOKIE = 'pawink_voter'; // 未登入回報用的瀏覽器識別碼
