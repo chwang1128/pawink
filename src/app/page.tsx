@@ -12,6 +12,29 @@ import { SERVICE_CATEGORIES, type ServiceCategoryKey } from '@/lib/service-categ
 import type { GroundingResult } from '@/lib/grounding';
 import GroundedAnswer, { GroundingLoading } from '@/components/GroundedAnswer';
 import OwnerReports from '@/components/OwnerReports';
+import ReportPrompt, { type VisitStore } from '@/components/ReportPrompt';
+import { POINTS_PER_REPORT } from '@/lib/report-questions';
+
+// 按過導航或通話的店家，回到網站時問一次「你最近去過嗎？」
+const VISIT_KEY = 'pawink_visit_intent';
+const ASKED_KEY = 'pawink_report_asked';
+const VISIT_MIN_AWAY_MS = 15 * 60_000; // 離開不到 15 分鐘就回來，多半只是看路線或打電話問問，先不問（下次回來再問）
+const VISIT_MAX_AGE_MS = 7 * 86_400_000; // 超過 7 天就不問了
+const ASK_AGAIN_MS = 30 * 86_400_000; // 同一家店 30 天內只問一次
+
+function readJson<T>(key: string): T | null {
+  try { const v = window.localStorage.getItem(key); return v ? (JSON.parse(v) as T) : null; } catch { return null; }
+}
+function writeJson(key: string, value: unknown) {
+  try { window.localStorage.setItem(key, JSON.stringify(value)); } catch { /* 無痕模式等情況，略過 */ }
+}
+function removeKey(key: string) {
+  try { window.localStorage.removeItem(key); } catch { /* 略過 */ }
+}
+type VisitIntent = VisitStore & { at: number; retried?: boolean };
+function isVisitStore(v: any): v is VisitIntent {
+  return v && typeof v.id === 'string' && typeof v.name === 'string' && Number.isFinite(v.lat) && Number.isFinite(v.lng) && Number.isFinite(v.at);
+}
 
 interface PetProfile {
   name: string;
@@ -295,6 +318,67 @@ export default function FullMapAIPortal() {
   const [isAiTyping, setIsAiTyping] = useState(false); 
   
   const [selectedDetailStore, setSelectedDetailStore] = useState<Store | null>(null);
+  const [reportPrompt, setReportPrompt] = useState<{ store: VisitStore; stage: 'ask' | 'form'; retried?: boolean } | null>(null);
+  const [reportsRefresh, setReportsRefresh] = useState(0);
+  const reportPromptOpen = useRef(false);
+  const reportDirty = useRef(false); // 視窗裡有送出回答，關窗後要更新店家卡
+  useEffect(() => { reportPromptOpen.current = !!reportPrompt; }, [reportPrompt]);
+
+  // 記下按過導航或通話的店家
+  const rememberVisit = (store: Store) => {
+    writeJson(VISIT_KEY, { id: store.id, name: store.name, primaryType: store.primaryType ?? null, lat: store.lat, lng: store.lng, locToken: store.locToken, at: Date.now() });
+  };
+
+  // 回到網站（或下次打開）時，問一次
+  useEffect(() => {
+    const check = () => {
+      if (document.visibilityState !== 'visible' || reportPromptOpen.current) return;
+      const v = readJson<unknown>(VISIT_KEY);
+      if (!isVisitStore(v)) { if (v) removeKey(VISIT_KEY); return; }
+      const age = Date.now() - v.at;
+      if (age > VISIT_MAX_AGE_MS) { removeKey(VISIT_KEY); return; }
+      if (age < VISIT_MIN_AWAY_MS) return;
+      removeKey(VISIT_KEY);
+      const asked = readJson<Record<string, number>>(ASKED_KEY) || {};
+      if (asked[v.id] && Date.now() - asked[v.id] < ASK_AGAIN_MS) return;
+      // 只保留 30 天內的紀錄，避免越存越多
+      const kept = Object.fromEntries(Object.entries(asked).filter(([, t]) => typeof t === 'number' && Date.now() - t < ASK_AGAIN_MS));
+      writeJson(ASKED_KEY, { ...kept, [v.id]: Date.now() });
+      const { at: _at, retried, ...store } = v;
+      reportPromptOpen.current = true;
+      setReportPrompt({ store, stage: 'ask', retried: !!retried });
+    };
+    check();
+    document.addEventListener('visibilitychange', check);
+    window.addEventListener('pageshow', check);
+    window.addEventListener('focus', check);
+    return () => {
+      document.removeEventListener('visibilitychange', check);
+      window.removeEventListener('pageshow', check);
+      window.removeEventListener('focus', check);
+    };
+  }, []);
+
+  const openReportForm = (s: Store) => setReportPrompt({
+    store: { id: s.id, name: s.name, primaryType: s.primaryType ?? null, lat: s.lat, lng: s.lng, locToken: s.locToken },
+    stage: 'form',
+  });
+
+  const closeReportPrompt = () => {
+    setReportPrompt(null);
+    if (reportDirty.current) { reportDirty.current = false; setReportsRefresh(n => n + 1); }
+  };
+  // 「還沒去」：不算問過，之後回來再問一次（只再問一次）
+  const notYetVisited = () => {
+    const p = reportPrompt;
+    if (p && !p.retried) {
+      const asked = readJson<Record<string, number>>(ASKED_KEY) || {};
+      delete asked[p.store.id];
+      writeJson(ASKED_KEY, asked);
+      writeJson(VISIT_KEY, { ...p.store, at: Date.now(), retried: true });
+    }
+    closeReportPrompt();
+  };
   const [isDetailsLoading, setIsDetailsLoading] = useState(false);
   const [expandedReviews, setExpandedReviews] = useState<Set<number>>(new Set());
   const [notice, setNotice] = useState<string | null>(null);
@@ -923,6 +1007,7 @@ export default function FullMapAIPortal() {
 
   const handleNavigate = () => {
     if (selectedDetailStore) {
+      rememberVisit(selectedDetailStore);
       window.open(`https://www.google.com/maps/dir/?api=1&destination=${selectedDetailStore.lat},${selectedDetailStore.lng}`, '_blank');
     }
   };
@@ -1472,13 +1557,15 @@ export default function FullMapAIPortal() {
               </div>
 
               <OwnerReports
+                variant="summary"
                 placeId={selectedDetailStore.id}
                 primaryType={selectedDetailStore.primaryType}
                 name={selectedDetailStore.name}
                 place={{ lat: selectedDetailStore.lat, lng: selectedDetailStore.lng, token: selectedDetailStore.locToken }}
                 here={userLocation}
-                onPoints={(p, pending) => { setCoins(p); setPendingCoins(pending); }}
+                refreshKey={reportsRefresh}
                 onLogin={() => signIn('google')}
+                onOpenForm={() => openReportForm(selectedDetailStore)}
               />
 
               {selectedDetailStore.details && selectedDetailStore.details.reviews.length > 0 && (
@@ -1545,6 +1632,7 @@ export default function FullMapAIPortal() {
               {selectedDetailStore.details?.phone ? (
                 <a 
                   href={telHref(selectedDetailStore.details.phone)}
+                  onClick={() => rememberVisit(selectedDetailStore)}
                   className="flex-1 bg-[#F7F2EA] hover:bg-[#E8DFD8] text-[#38312D] font-black text-xs sm:text-sm py-3 rounded-2xl flex items-center justify-center transition-all active:scale-95"
                 >
                   <Phone className="w-3.5 h-3.5 mr-1 text-blue-600" />
@@ -1560,6 +1648,17 @@ export default function FullMapAIPortal() {
                   通話
                 </span>
               )}
+
+              <button
+                type="button"
+                onClick={() => openReportForm(selectedDetailStore)}
+                aria-label={`回報這家店的寵物友善資訊，每題 ${POINTS_PER_REPORT} 點`}
+                className="relative flex-[0.8] bg-[#FFF4E5] hover:bg-[#FCEBD2] ring-1 ring-[#F0D9B5] text-[#B88746] font-black text-xs sm:text-sm py-3 rounded-2xl flex items-center justify-center transition-all active:scale-95"
+              >
+                <Edit3 className="w-3.5 h-3.5 mr-1" aria-hidden="true" />
+                回報
+                <span aria-hidden="true" className="absolute -top-2 -right-1 bg-[#B88746] text-white text-[9px] font-black px-1.5 py-0.5 rounded-full shadow">＋{POINTS_PER_REPORT}P</span>
+              </button>
 
               <button 
                 onClick={handleNavigate}
@@ -1799,6 +1898,21 @@ export default function FullMapAIPortal() {
             </p>
           </div>
         </div>
+      )}
+
+      {/* 幫忙回報視窗 */}
+      {reportPrompt && (
+        <ReportPrompt
+          store={reportPrompt.store}
+          stage={reportPrompt.stage}
+          here={userLocation}
+          onStage={stage => setReportPrompt(prev => (prev ? { ...prev, stage } : prev))}
+          onClose={closeReportPrompt}
+          onNotYet={notYetVisited}
+          onAnswered={() => { reportDirty.current = true; }}
+          onPoints={(p, pending) => { setCoins(p); setPendingCoins(pending); }}
+          onLogin={() => signIn('google')}
+        />
       )}
 
       {/* 定位被拒絕 UI */}
