@@ -61,9 +61,15 @@ export default function PetCompanion({
   const H = desktop ? 170 : 132; // 舞台高
   const PET_H = desktop ? 118 : 92;
   // 放在地圖左下角，避開店家卡片列與推薦面板
-  const wide = typeof window !== 'undefined' && window.innerWidth >= 1024;
+  const [vw, setVw] = useState(1280);
+  useEffect(() => { const on = () => setVw(window.innerWidth); on(); window.addEventListener('resize', on); return () => window.removeEventListener('resize', on); }, []);
+  const wide = vw >= 1024;
   const bottom = desktop ? (hasCarousel ? 220 : 24) : (hasCarousel ? 196 : hasFeatured ? 214 : 20);
   const left = desktop ? (hasFeatured && !hasCarousel ? (wide ? 380 : 320) : 24) : 10;
+  // 桌機右側 AI 對話框開著時，中間放不下就先縮成頭像（點開時蓋在最上層）
+  const room = desktop ? (chatOpen ? vw - 24 - (wide ? 400 : 340) - 16 : vw - 24) - left : vw;
+  const cramped = desktop && room < W;
+  const [forceOpen, setForceOpen] = useState(false);
 
   const [snap, setSnap] = useState<Snap | null>(null);
   const [guest, setGuest] = useState<Stats>({ fullness: 55, cleanliness: 70, mood: 60 });
@@ -83,6 +89,12 @@ export default function PetCompanion({
   const raf = useRef<number>();
   const idSeq = useRef(1);
   const lastInteract = useRef(Date.now());
+  const mounted = useRef(true);
+  const dragging = useRef(false);
+  const dragCleanup = useRef<() => void>();
+  const petBtn = useRef<HTMLButtonElement>(null);
+  // 開發模式的 StrictMode 會先卸載再掛載一次，所以掛載時要設回 true
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; dragCleanup.current?.(); }; }, []);
 
   const pet = snap?.pets?.[0];
   const stats: Stats = loggedIn ? (pet?.stats ?? guest) : guest;
@@ -94,7 +106,10 @@ export default function PetCompanion({
 
   // ---- 讀取 ----
   useEffect(() => {
-    try { setMinimized(localStorage.getItem(MIN_KEY) === '1'); } catch { /* 略過 */ }
+    let saved: string | null = null;
+    try { saved = localStorage.getItem(MIN_KEY); } catch { /* 略過 */ }
+    // 沒設定過：手機先縮成頭像，不擋地圖；桌機直接展開
+    setMinimized(saved === null ? !window.matchMedia('(min-width: 768px)').matches : saved === '1');
   }, []);
   useEffect(() => {
     if (!loggedIn) { setSnap({ loggedIn: false }); return; }
@@ -104,18 +119,19 @@ export default function PetCompanion({
 
   const toggleMin = (v: boolean) => {
     setMinimized(v);
+    if (v) setForceOpen(false);
     try { localStorage.setItem(MIN_KEY, v ? '1' : '0'); } catch { /* 略過 */ }
   };
 
   // ---- 小工具 ----
   const say = useCallback((text: string, ms = 2200) => {
     setBubble(text);
-    window.setTimeout(() => setBubble(b => (b === text ? null : b)), ms);
+    window.setTimeout(() => { if (mounted.current) setBubble(b => (b === text ? null : b)); }, ms);
   }, []);
   const burst = useCallback((px: number, py: number, text: string, n = 1, cls = '') => {
     const add: Particle[] = Array.from({ length: n }, (_, i) => ({ id: idSeq.current++, x: px + (i - (n - 1) / 2) * 16, y: py, text, cls }));
     setParticles(p => [...p, ...add]);
-    window.setTimeout(() => setParticles(p => p.filter(q => !add.some(a => a.id === q.id))), 1400);
+    window.setTimeout(() => { if (mounted.current) setParticles(p => p.filter(q => !add.some(a => a.id === q.id))); }, 1400);
   }, []);
   const wait = (ms: number) => new Promise(r => window.setTimeout(r, ms));
 
@@ -131,13 +147,15 @@ export default function PetCompanion({
       const dir = Math.sign(t - xRef.current);
       xRef.current += dir * SPEED * dt;
       if ((dir > 0 && xRef.current >= t) || (dir < 0 && xRef.current <= t)) {
-        xRef.current = t; setX(t); setPose('idle'); resolve(); return;
+        xRef.current = t;
+        if (mounted.current) { setX(t); setPose('idle'); }
+        resolve(); return;
       }
-      setX(xRef.current);
+      if (petBtn.current) petBtn.current.style.left = `${xRef.current - PET_H * 0.6}px`;
       raf.current = requestAnimationFrame(step);
     };
     raf.current = requestAnimationFrame(step);
-  }), [W]);
+  }), [W, PET_H]);
 
   // ---- 呼叫伺服器（未登入只做動畫，不存檔）----
   const call = useCallback(async (body: Record<string, unknown>): Promise<{ ok: boolean; error?: string; gainedXp?: number }> => {
@@ -146,6 +164,7 @@ export default function PetCompanion({
       const res = await fetch('/api/vpet', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const j = await res.json();
       if (!res.ok) return { ok: false, error: j.error };
+      if (!mounted.current) return { ok: true };
       setSnap(prev => ({ ...(prev || { loggedIn: true }), ...j }));
       if (typeof j.points === 'number') onPoints?.(j.points, j.pending ?? 0);
       return { ok: true, gainedXp: j.result?.gainedXp };
@@ -166,7 +185,7 @@ export default function PetCompanion({
     const stage = stageRef.current!.getBoundingClientRect();
     const head = (e.clientY - r.top) / r.height < 0.5;
     const px = e.clientX - stage.left, py = e.clientY - stage.top;
-    if (busyRef.current) return;
+    if (busyRef.current) { say('等我一下，正在忙', 1200); return; }
     if (head) {
       setPose('petted');
       burst(px, py - 10, '❤', 3, 'text-[#E46B6B]');
@@ -177,7 +196,7 @@ export default function PetCompanion({
         if (res.ok && res.gainedXp) burst(px, py - 40, `親密度 +${res.gainedXp}`, 1, 'text-[#B88746] text-[11px] font-black');
       }
       await wait(1400);
-      setPose('idle');
+      if (mounted.current) setPose('idle');
     } else {
       setHop(h => h + 1);
       say(pet?.species === 'cat' ? '喵～' : '汪！', 1200);
@@ -186,7 +205,7 @@ export default function PetCompanion({
 
   // ---- 放下東西 ----
   const doDrop = async (item: TrayItem, dropX: number) => {
-    if (busyRef.current) return;
+    if (busyRef.current) { say('等我一下，正在忙', 1200); return; }
     if (item.disabled) { say(item.disabled); return; }
     if (memorial && item.kind !== 'bath') { say('牠在彩虹橋那邊吃飽飽了'); return; }
     lastInteract.current = Date.now();
@@ -241,23 +260,34 @@ export default function PetCompanion({
       if (res.gainedXp) burst(xRef.current, H - PET_H - 10, `親密度 +${res.gainedXp}`, 1, 'text-[#B88746] text-[11px] font-black');
       await wait(900);
     } finally {
-      setDrops(d => d.filter(q => q.id !== id));
-      setPose('idle');
       busyRef.current = false;
+      if (mounted.current) {
+        setDrops(d => d.filter(q => q.id !== id));
+        setPose('idle');
+      }
     }
   };
 
   // ---- 拖曳 ----
   const startDrag = (e: React.PointerEvent, item: TrayItem) => {
     e.preventDefault();
+    e.stopPropagation();
+    dragging.current = true;
     setDrag({ item, x: e.clientX, y: e.clientY, moved: false });
     const sx = e.clientX, sy = e.clientY;
     const move = (ev: PointerEvent) => setDrag(d => d && { ...d, x: ev.clientX, y: ev.clientY, moved: d.moved || Math.hypot(ev.clientX - sx, ev.clientY - sy) > 8 });
-    const up = (ev: PointerEvent) => {
+    const cleanup = () => {
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);
       window.removeEventListener('pointercancel', up);
+      dragging.current = false;
+      dragCleanup.current = undefined;
+    };
+    const up = (ev: PointerEvent) => {
+      cleanup();
+      if (!mounted.current) return;
       setDrag(null);
+      if (ev.type === 'pointercancel') return;
       const moved = Math.hypot(ev.clientX - sx, ev.clientY - sy) > 8;
       if (!moved) { doDrop(item, xRef.current + (facing >= 0 ? 1 : -1) * PET_H * 0.9); return; } // 點一下：放在牠面前
       const r = stageRef.current?.getBoundingClientRect();
@@ -266,13 +296,14 @@ export default function PetCompanion({
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
     window.addEventListener('pointercancel', up);
+    dragCleanup.current = cleanup;
   };
 
   // ---- 沒事時自己走走 ----
   useEffect(() => {
     if (minimized || hidden) return;
     const t = window.setInterval(() => {
-      if (busyRef.current || Date.now() - lastInteract.current < 5000) return;
+      if (busyRef.current || dragging.current || Date.now() - lastInteract.current < 5000) return;
       if (hungry || memorial) return;
       if (Math.random() < 0.5) walkTo(60 + Math.random() * (W - 120));
       else setHop(h => h + 1);
@@ -300,11 +331,11 @@ export default function PetCompanion({
   if (hidden || (!desktop && chatOpen)) return null;
 
   // ---- 縮小 ----
-  if (minimized) {
+  if (minimized || (cramped && !forceOpen)) {
     return (
       <button
         type="button"
-        onClick={() => toggleMin(false)}
+        onClick={() => (minimized ? toggleMin(false) : setForceOpen(true))}
         aria-label={`打開 ${name}`}
         className="absolute z-[15] pointer-events-auto w-16 h-16 rounded-full bg-[#FFF4E5]/95 ring-1 ring-[#F0D9B5] shadow-[0_8px_24px_rgba(56,49,45,0.15)] overflow-hidden active:scale-95 transition-transform"
         style={{ bottom, left }}
@@ -327,7 +358,7 @@ export default function PetCompanion({
   );
 
   return (
-    <div className="absolute z-[15] pointer-events-none select-none" style={{ bottom, left, width: W }}>
+    <div className={`absolute ${cramped ? 'z-[75]' : 'z-[15]'} pointer-events-none select-none`} style={{ bottom, left: cramped ? Math.max(8, Math.min(left, vw - W - 8)) : left, width: W }}>
       {/* 名牌與狀態 */}
       <div className="pointer-events-auto flex items-center gap-2 mb-1 px-2.5 py-1 rounded-full bg-[#FFFDF9]/90 backdrop-blur ring-1 ring-[#E8DFD8] shadow-sm w-max max-w-full">
         <span className="text-[11px] font-black text-[#38312D] truncate max-w-[72px]">{name}</span>
@@ -355,13 +386,14 @@ export default function PetCompanion({
         ))}
         {/* 牠 */}
         <button
+          ref={petBtn}
           type="button"
           onClick={onPetClick}
           aria-label={`${name}：點頭摸摸，點身體跳一下`}
           className="absolute bottom-1 pointer-events-auto cursor-pointer focus:outline-none"
           style={{ left: x - PET_H * 0.6, width: PET_H * 1.2, height: PET_H }}
         >
-          <div key={hop} className="w-full h-full animate-[pethop_.5s_ease-out]">
+          <div key={`${hop}-${pose === 'petted' ? 'p' : ''}`} className={`w-full h-full ${pose === 'petted' ? 'animate-[petsquash_.45s_ease-out]' : 'animate-[pethop_.5s_ease-out]'}`} style={{ transformOrigin: '50% 100%' }}>
             <div className={`relative w-full h-full ${effPose === 'walk' ? 'animate-[petwalk_.32s_ease-in-out_infinite]' : effPose === 'idle' ? 'animate-[petidle_3s_ease-in-out_infinite]' : ''}`}>
               <img
                 src={SPRITE[effPose]}
@@ -383,7 +415,7 @@ export default function PetCompanion({
         </button>
         {/* 對話泡泡 */}
         {autoBubble && (
-          <div className="absolute px-2.5 py-1 rounded-2xl bg-white shadow-md ring-1 ring-[#E8DFD8] text-[11px] font-bold text-[#38312D] whitespace-nowrap -translate-x-1/2 animate-[petdrop_.25s_ease-out]" style={{ left: Math.min(Math.max(x, 60), W - 60), bottom: PET_H + 8 }}>
+          <div role="status" aria-live="polite" className="absolute px-2.5 py-1 rounded-2xl bg-white shadow-md ring-1 ring-[#E8DFD8] text-[11px] font-bold text-[#38312D] whitespace-nowrap -translate-x-1/2 animate-[petdrop_.25s_ease-out]" style={{ left: Math.min(Math.max(x, 60), W - 60), bottom: PET_H + 8 }}>
             {autoBubble}
           </div>
         )}
