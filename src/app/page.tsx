@@ -1405,7 +1405,7 @@ export default function FullMapAIPortal() {
               
               <div className="pl-1.5 pr-1 py-1 md:px-2.5 md:py-1.5 flex flex-col flex-1 justify-center min-w-0">
                 <h3 className="font-black text-[#38312D] text-[12px] md:text-[13px] leading-tight line-clamp-2 md:line-clamp-none md:truncate pr-3 md:pr-4">{store.name}</h3>
-                <div className="flex items-center mt-0.5 md:mt-1 space-x-1.5 md:space-x-2 text-[10px] md:text-[11px] font-bold overflow-hidden">
+                <div className="flex items-center mt-0.5 md:mt-1 space-x-1.5 md:space-x-2 text-[11px] font-bold overflow-hidden">
                   <span className="text-[#4D8B6F] flex items-center shrink-0">
                     <Navigation className="w-3 h-3 mr-0.5" aria-hidden="true" />
                     <span className="sr-only">距離</span>{store.distanceText}
@@ -1472,7 +1472,7 @@ export default function FullMapAIPortal() {
                       {store.name}
                     </button>
                   </h3>
-                  <div className="flex items-center mt-0.5 md:mt-1 space-x-1.5 md:space-x-2 text-[10px] md:text-[11px] font-bold overflow-hidden">
+                  <div className="flex items-center mt-0.5 md:mt-1 space-x-1.5 md:space-x-2 text-[11px] font-bold overflow-hidden">
                     <span className="text-[#4D8B6F] flex items-center shrink-0">
                       <Navigation className="w-3 h-3 mr-0.5" aria-hidden="true" />
                       <span className="sr-only">距離</span>{store.distanceText}
