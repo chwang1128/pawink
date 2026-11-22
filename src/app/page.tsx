@@ -1440,7 +1440,7 @@ export default function FullMapAIPortal() {
               <li
                 key={store.id}
                 data-slot={index + 1}
-                className="card-enter relative w-[78vw] max-w-[320px] md:w-[196px] h-[80px] md:h-[58px] shrink-0 snap-center bg-[#FFFDF9]/92 backdrop-blur-2xl rounded-[22px] md:rounded-[16px] shadow-[0_12px_28px_rgba(184,135,70,0.12)] ring-1 ring-[#E8DFD8] overflow-hidden flex transition-transform hover:-translate-y-0.5 focus-within:ring-2 focus-within:ring-[#B88746]"
+                className="card-enter relative w-[78vw] max-w-[320px] md:w-[224px] h-[80px] md:h-[58px] shrink-0 snap-center bg-[#FFFDF9]/92 backdrop-blur-2xl rounded-[22px] md:rounded-[16px] shadow-[0_12px_28px_rgba(184,135,70,0.12)] ring-1 ring-[#E8DFD8] overflow-hidden flex transition-transform hover:-translate-y-0.5 focus-within:ring-2 focus-within:ring-[#B88746]"
                 style={{ animationDelay: `${index * 0.08}s` }}
               >
                 <div className="relative w-[80px] md:w-[58px] h-full shrink-0">
