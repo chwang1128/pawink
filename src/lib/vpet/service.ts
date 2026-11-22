@@ -157,7 +157,8 @@ export async function doAction(userId: string, vpetId: string, action: ActionKin
       throw new VpetError('不支援的動作', 400);
     }
 
-    const next = v.memorialAt ? { fullness: 100, cleanliness: 100, mood: 100 } : applyEffect(stats, effect);
+    // 紀念模式下不改寫數值（凍結），只累積親密度
+    const next = v.memorialAt ? {} : applyEffect(stats, effect);
     const xp = gainXp(v, effect.xp ?? 0, today);
     // 樂觀鎖：同時有兩個操作時，只有一個會成功
     const updated = await tx.virtualPet.updateMany({
@@ -221,6 +222,7 @@ export async function equip(userId: string, vpetId: string, slot: Slot, sku: str
 
 // ---- 簽到與任務 ----
 async function grant(userId: string, reason: string, refId: string, amount: number) {
+  if (!(amount > 0)) throw new Error('grant 只能加點');
   try {
     await prisma.$transaction([
       prisma.pointLedger.create({ data: { userId, amount, reason, refId, status: 'granted' } }),
@@ -240,6 +242,7 @@ export async function claim(userId: string, kind: 'checkin' | 'daily_care') {
     if (checkedInToday) throw new VpetError('今天已經簽到過了');
     const day = (streak % 7) + 1; // 第 1–7 天循環
     const got = await grant(userId, 'checkin', today, CHECKIN_POINTS + (STREAK_BONUS[day] ?? 0));
+    if (got === 0) throw new VpetError('今天已經簽到過了');
     const weekly = await grant(userId, 'weekly_login', weekKeyTW(), WEEKLY_LOGIN_POINTS);
     return { got: got + weekly, day, weekly: weekly > 0 };
   }
@@ -247,18 +250,31 @@ export async function claim(userId: string, kind: 'checkin' | 'daily_care') {
   const c = snap.rewards.care;
   if (c.claimed) throw new VpetError('今天的任務獎勵已經領過了');
   if (!(c.feed && c.pet && c.play && c.report)) throw new VpetError('還有任務沒完成');
-  return { got: await grant(userId, 'daily_care', today, DAILY_CARE_POINTS) };
+  const got = await grant(userId, 'daily_care', today, DAILY_CARE_POINTS);
+  if (got === 0) throw new VpetError('今天的任務獎勵已經領過了');
+  return { got };
 }
 
+// 紀念模式：只凍結數值，不改寫數值（避免開開關關把餓肚子洗成飽飽）；每天只能切換一次
 export async function setMemorial(userId: string, vpetId: string, on: boolean) {
-  const v = await prisma.virtualPet.findFirst({ where: { id: vpetId, userId }, select: { id: true } });
-  if (!v) throw new VpetError('找不到這隻毛孩', 404);
   const now = new Date();
-  await prisma.virtualPet.update({
-    where: { id: vpetId },
-    data: on
-      ? { memorialAt: now, fullness: 100, cleanliness: 100, mood: 100, lastTickAt: now, version: { increment: 1 } }
-      : { memorialAt: null, fullness: 80, cleanliness: 80, mood: 80, lastTickAt: now, version: { increment: 1 } },
+  await prisma.$transaction(async (tx) => {
+    const v = await tx.virtualPet.findFirst({ where: { id: vpetId, userId } });
+    if (!v) throw new VpetError('找不到這隻毛孩', 404);
+    if (!!v.memorialAt === on) return;
+    try {
+      await tx.rewardClaim.create({ data: { userId, kind: `memorial:${vpetId}`, periodKey: dayKeyTW(now) } });
+    } catch (e) {
+      if (isUnique(e)) throw new VpetError('紀念模式每天只能切換一次');
+      throw e;
+    }
+    // 開啟：把到現在為止的變化先算進去再凍結；關閉：從凍結時的數值繼續，紀念期間不算飢餓
+    const frozen = on ? currentStats(v, now) : {};
+    const updated = await tx.virtualPet.updateMany({
+      where: { id: v.id, version: v.version },
+      data: { ...frozen, memorialAt: on ? now : null, lastTickAt: now, version: { increment: 1 } },
+    });
+    if (updated.count !== 1) throw new VpetError('請再試一次');
   });
 }
 

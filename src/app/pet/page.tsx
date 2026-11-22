@@ -144,14 +144,14 @@ export default function PetPage() {
   const toys = items.filter(i => i.category === 'toy' && (inv[i.sku] ?? 0) > 0 && (!i.species || i.species === pet.species));
   const usables = items.filter(i => i.consumable && (inv[i.sku] ?? 0) > 0 && (!i.species || i.species === pet.species));
   const r = state.rewards!;
-  const btn = 'flex-1 min-w-0 rounded-2xl py-3 text-xs font-black flex flex-col items-center gap-0.5 ring-1 transition-all active:scale-95 disabled:opacity-40';
+  const btn = 'flex-1 min-w-0 rounded-2xl py-3 text-xs font-black flex flex-col items-center gap-0.5 ring-1 ring-[#E8DFD8] transition-all active:scale-95 disabled:opacity-40';
 
   return shell(
     <>
       {state.pets!.length > 1 && (
         <div className="flex gap-2 pt-3 overflow-x-auto" role="tablist" aria-label="選擇毛孩">
           {state.pets!.map((p, i) => (
-            <button key={p.id} role="tab" aria-selected={i === petIdx} onClick={() => setPetIdx(i)} className="px-3 py-1.5 rounded-full text-xs font-bold ring-1 whitespace-nowrap" style={i === petIdx ? { background: C.ink, color: '#fff' } : { background: '#fff', borderColor: C.line }}>
+            <button key={p.id} role="tab" aria-selected={i === petIdx} onClick={() => setPetIdx(i)} className="px-3 py-1.5 rounded-full text-xs font-bold ring-1 ring-[#E8DFD8] whitespace-nowrap" style={i === petIdx ? { background: C.ink, color: '#fff' } : { background: '#fff', borderColor: C.line }}>
               {p.name}
             </button>
           ))}
@@ -159,7 +159,7 @@ export default function PetPage() {
       )}
 
       {/* 分身舞台 */}
-      <section className="mt-3 rounded-[28px] overflow-hidden ring-1 relative" style={{ background: pet.memorial ? 'linear-gradient(#EEF0F7,#F7F2EA)' : 'linear-gradient(#FCEBD2,#FFF6EA)', borderColor: C.line }}>
+      <section className="mt-3 rounded-[28px] overflow-hidden ring-1 ring-[#E8DFD8] relative" style={{ background: pet.memorial ? 'linear-gradient(#EEF0F7,#F7F2EA)' : 'linear-gradient(#FCEBD2,#FFF6EA)', borderColor: C.line }}>
         <div className="absolute top-3 left-4 text-[11px] font-bold px-2 py-1 rounded-full bg-white/80">Lv.{pet.level}</div>
         {pet.memorial && <div className="absolute top-3 right-4 text-[11px] font-bold px-2 py-1 rounded-full bg-white/80">🌈 紀念模式</div>}
         <div className="h-64 flex items-center justify-center">
@@ -170,7 +170,7 @@ export default function PetPage() {
             {(Object.entries(pet.equipped) as [Slot, string][]).map(([slot, sku]) => (
               <span key={slot} className={`absolute select-none ${SLOT_POS[slot]}`} aria-hidden="true">{bySku[sku]?.icon}</span>
             ))}
-            {dirty && <span className="absolute bottom-6 left-6 text-2xl opacity-80" aria-hidden="true">💩</span>}
+            {dirty && <span className="absolute bottom-4 -left-6 text-xs font-bold px-2 py-1 rounded-xl bg-white shadow" aria-hidden="true">🧼 髒髒</span>}
             {pet.sparkle && <span className="absolute top-2 right-2 text-3xl animate-pulse" aria-hidden="true">✨</span>}
             {hungry && <span className="absolute -top-2 -right-6 text-xs font-bold px-2 py-1 rounded-xl bg-white shadow" aria-hidden="true">🍚 餓餓</span>}
           </div>
@@ -186,7 +186,7 @@ export default function PetPage() {
       </section>
 
       {/* 狀態 */}
-      <section className="mt-3 rounded-2xl ring-1 bg-white p-4 space-y-2" style={{ borderColor: C.line }} aria-label="狀態">
+      <section className="mt-3 rounded-2xl ring-1 ring-[#E8DFD8] bg-white p-4 space-y-2" style={{ borderColor: C.line }} aria-label="狀態">
         <Bar label="飽足" value={s.fullness} color={C.gold} />
         <Bar label="清潔" value={s.cleanliness} color="#6FA8C9" />
         <Bar label="心情" value={s.mood} color={C.green} />
@@ -211,11 +211,11 @@ export default function PetPage() {
         </button>
       </section>
       {pick && (
-        <div className="mt-2 rounded-2xl ring-1 bg-white p-3 flex flex-wrap gap-2" style={{ borderColor: C.line }}>
+        <div className="mt-2 rounded-2xl ring-1 ring-[#E8DFD8] bg-white p-3 flex flex-wrap gap-2" style={{ borderColor: C.line }}>
           {(pick === 'play' ? toys : usables).length === 0 ? (
             <p className="text-xs" style={{ color: C.sub }}>{pick === 'play' ? '還沒有玩具' : '還沒有道具，可以到商店買；每天第一次回報店家也會送一份零食'}</p>
           ) : (pick === 'play' ? toys : usables).map(i => (
-            <button key={i.sku} type="button" disabled={busy} onClick={() => act(pick, i.sku)} className="px-3 py-2 rounded-xl text-xs font-bold ring-1 flex items-center gap-1.5" style={{ background: C.sand, borderColor: C.line }}>
+            <button key={i.sku} type="button" disabled={busy} onClick={() => act(pick, i.sku)} className="px-3 py-2 rounded-xl text-xs font-bold ring-1 ring-[#E8DFD8] flex items-center gap-1.5" style={{ background: C.sand, borderColor: C.line }}>
               <span aria-hidden="true">{i.icon}</span>{i.name}{i.consumable && <span style={{ color: C.sub }}>×{inv[i.sku]}</span>}
             </button>
           ))}
@@ -233,7 +233,7 @@ export default function PetPage() {
 
       {tab === 'tasks' && (
         <section className="mt-3 space-y-3">
-          <div className="rounded-2xl ring-1 bg-white p-4" style={{ borderColor: C.line }}>
+          <div className="rounded-2xl ring-1 ring-[#E8DFD8] bg-white p-4" style={{ borderColor: C.line }}>
             <div className="flex items-center justify-between">
               <h3 className="font-black text-sm">每日簽到</h3>
               <span className="text-[11px]" style={{ color: C.sub }}>連續 {r.streak} 天</span>
@@ -254,7 +254,7 @@ export default function PetPage() {
               {r.checkedInToday ? '今天已簽到' : `簽到領 ${r.nextCheckin} 點${r.weeklyClaimed ? '' : '（本週第一次再加 15）'}`}
             </button>
           </div>
-          <div className="rounded-2xl ring-1 bg-white p-4" style={{ borderColor: C.line }}>
+          <div className="rounded-2xl ring-1 ring-[#E8DFD8] bg-white p-4" style={{ borderColor: C.line }}>
             <h3 className="font-black text-sm mb-2">今天的照顧任務</h3>
             {([['feed', '餵一次飯'], ['pet', '摸摸一次'], ['play', '陪玩一次'], ['report', '回報一家店']] as const).map(([k, label]) => (
               <div key={k} className="flex items-center gap-2 py-1 text-sm">
@@ -277,7 +277,7 @@ export default function PetPage() {
             const owned = !i.consumable && (inv[i.sku] ?? 0) > 0;
             const tooPoor = (state.points ?? 0) < i.price;
             return (
-              <div key={i.sku} className="rounded-2xl ring-1 bg-white p-3 flex flex-col" style={{ borderColor: C.line }}>
+              <div key={i.sku} className="rounded-2xl ring-1 ring-[#E8DFD8] bg-white p-3 flex flex-col" style={{ borderColor: C.line }}>
                 <div className="text-3xl" aria-hidden="true">{i.icon}</div>
                 <div className="text-sm font-black mt-1">{i.name}</div>
                 <div className="text-[11px] flex-1" style={{ color: C.sub }}>{i.desc}{i.consumable && inv[i.sku] ? `（有 ${inv[i.sku]}）` : ''}</div>
@@ -296,12 +296,12 @@ export default function PetPage() {
             const owned = items.filter(i => i.slot === key && (inv[i.sku] ?? 0) > 0);
             const on = pet.equipped[key];
             return (
-              <div key={key} className="rounded-2xl ring-1 bg-white p-3" style={{ borderColor: C.line }}>
+              <div key={key} className="rounded-2xl ring-1 ring-[#E8DFD8] bg-white p-3" style={{ borderColor: C.line }}>
                 <h3 className="text-xs font-black mb-2">{name}</h3>
                 {owned.length === 0 ? <p className="text-[11px]" style={{ color: C.sub }}>還沒有，可以到商店看看</p> : (
                   <div className="flex flex-wrap gap-2">
                     {owned.map(i => (
-                      <button key={i.sku} type="button" disabled={busy} aria-pressed={on === i.sku} onClick={() => post({ op: 'equip', vpetId: pet.id, slot: key, sku: on === i.sku ? null : i.sku }, on === i.sku ? `脫下${i.name}` : `穿上${i.name}`)} className="px-3 py-2 rounded-xl text-xs font-bold ring-2 flex items-center gap-1.5" style={on === i.sku ? { borderColor: C.gold, background: '#FFF4E5' } : { borderColor: 'transparent', background: C.sand }}>
+                      <button key={i.sku} type="button" disabled={busy} aria-pressed={on === i.sku} onClick={() => post({ op: 'equip', vpetId: pet.id, slot: key, sku: on === i.sku ? null : i.sku }, on === i.sku ? `脫下${i.name}` : `穿上${i.name}`)} className="px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5" style={on === i.sku ? { boxShadow: `0 0 0 2px ${C.gold}`, background: '#FFF4E5' } : { background: C.sand }}>
                         <span aria-hidden="true">{i.icon}</span>{i.name}
                       </button>
                     ))}
@@ -314,7 +314,7 @@ export default function PetPage() {
       )}
 
       {tab === 'bag' && (
-        <section className="mt-3 rounded-2xl ring-1 bg-white p-3" style={{ borderColor: C.line }}>
+        <section className="mt-3 rounded-2xl ring-1 ring-[#E8DFD8] bg-white p-3" style={{ borderColor: C.line }}>
           {Object.entries(inv).filter(([sku]) => bySku[sku] && bySku[sku].category !== 'wear').length === 0 ? (
             <p className="text-xs" style={{ color: C.sub }}>背包是空的</p>
           ) : Object.entries(inv).filter(([sku]) => bySku[sku] && bySku[sku].category !== 'wear').map(([sku, qty]) => (
@@ -336,7 +336,7 @@ export default function PetPage() {
             {pet.memorial ? '關閉紀念模式' : '牠已經去當小天使了？開啟紀念模式'}
           </button>
         ) : (
-          <div className="rounded-2xl ring-1 bg-white p-4 text-left" style={{ borderColor: C.line }}>
+          <div className="rounded-2xl ring-1 ring-[#E8DFD8] bg-white p-4 text-left" style={{ borderColor: C.line }}>
             <p className="text-sm mb-3 flex items-start gap-2"><Heart className="w-4 h-4 mt-0.5 shrink-0" style={{ color: C.red }} aria-hidden="true" />
               {pet.memorial ? `要讓 ${pet.name} 回到一般模式嗎？` : `開啟後 ${pet.name} 不會再餓或變髒，你還是可以摸摸牠、幫牠換衣服`}
             </p>
