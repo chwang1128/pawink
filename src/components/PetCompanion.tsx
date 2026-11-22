@@ -77,8 +77,9 @@ export default function PetCompanion({
   const [vw, setVw] = useState(1280);
   useEffect(() => { const on = () => setVw(window.innerWidth); on(); window.addEventListener('resize', on); return () => window.removeEventListener('resize', on); }, []);
   const wide = vw >= 1024;
-  const bottom = desktop ? (hasCarousel ? 220 : 16) : (hasCarousel ? 196 : hasFeatured ? 214 : 16);
-  const left = desktop ? (hasFeatured && !hasCarousel ? (wide ? 380 : 320) : 24) : 10;
+  // 桌機固定在左下角（店家卡片已讓出左邊）；手機避開下方的店家卡片
+  const bottom = desktop ? 16 : (hasCarousel ? 196 : hasFeatured ? 214 : 16);
+  const left = desktop ? 24 : 10;
   // 桌機右側 AI 對話框開著時，中間放不下就先縮成頭像（點開時蓋在最上層）
   const chatW = chatWide ? (wide ? 400 : 340) : (wide ? 320 : 300);
   const room = desktop ? (chatOpen ? vw - 24 - chatW - 16 : vw - 24) - left : vw;
