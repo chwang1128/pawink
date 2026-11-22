@@ -1426,7 +1426,7 @@ export default function FullMapAIPortal() {
       {featuredStores.length > 0 && displayedStores.length === 0 && !selectedDetailStore && (
         <section
           aria-label="附近店家"
-          className={`absolute z-20 pointer-events-auto left-0 right-0 bottom-9 md:bottom-5 md:left-[340px] ${isAiBoxMinimized ? 'md:right-28' : isAiCompact ? 'md:right-[344px] lg:right-[364px]' : 'md:right-[380px] lg:right-[440px]'}`}
+          className={`absolute z-20 pointer-events-auto left-0 right-0 bottom-9 md:bottom-5 md:left-[340px] ${isAiBoxMinimized ? 'md:right-48' : isAiCompact ? 'md:right-[344px] lg:right-[364px]' : 'md:right-[380px] lg:right-[440px]'}`}
         >
           <h2 className="px-4 md:px-1 mb-2 md:mb-1.5 text-xs font-black text-[#4A423D] tracking-wide flex items-center md:justify-center">
             <span className="bg-[#FFFDF9]/90 backdrop-blur-xl rounded-full px-3 py-1 ring-1 ring-[#E8DFD8] shadow-sm flex items-center">
@@ -1435,7 +1435,7 @@ export default function FullMapAIPortal() {
             </span>
             <span className="ml-2 bg-[#FFFDF9]/90 rounded-full px-2 py-0.5 ring-1 ring-[#E8DFD8]"><GoogleMapsAttribution /></span>
           </h2>
-          <ul className="flex gap-3 md:gap-2 overflow-x-auto snap-x snap-mandatory touch-pan-x hide-scrollbar px-4 md:px-0 pb-1 md:w-max md:max-w-full md:mx-auto">
+          <ul className="flex gap-3 md:gap-2 overflow-x-auto snap-x snap-mandatory md:snap-none touch-pan-x hide-scrollbar px-4 md:px-0 pb-1 md:w-max md:max-w-full md:mx-auto">
             {featuredStores.map((store, index) => (
               <li
                 key={store.id}
