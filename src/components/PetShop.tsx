@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 // 毛孩商店：從地圖左側工具列的「商店」打開。用點數買零食、玩具、穿搭。
 // 版面依 ChatGPT 的設計稿：桌機置中彈窗（720 寬）、手機從下面拉上來的抽屜；三個分頁、左圖右文的商品卡、購買前確認。
@@ -38,11 +38,14 @@ export default function PetShop({ open, onClose, onLogin, onBought }: {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const buying = useRef(false); // 連點確認只送一次
+  const closeBtn = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!open) return;
     setFailed(false);
     fetch('/api/vpet').then(r => (r.ok ? r.json() : Promise.reject())).then(setState).catch(() => setFailed(true));
+    closeBtn.current?.focus();
   }, [open]);
   useEffect(() => {
     if (!open) return;
@@ -69,7 +72,8 @@ export default function PetShop({ open, onClose, onLogin, onBought }: {
     setErr(null); setQty(1); setPick(i);
   };
   const confirm = async () => {
-    if (!pick) return;
+    if (!pick || buying.current) return;
+    buying.current = true;
     setBusy(true); setErr(null);
     try {
       const res = await fetch('/api/vpet', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ op: 'buy', sku: pick.sku, qty: pick.consumable ? qty : 1, requestId: uuid() }) });
@@ -83,6 +87,7 @@ export default function PetShop({ open, onClose, onLogin, onBought }: {
       setErr('網路不穩，等一下再試');
     } finally {
       setBusy(false);
+      buying.current = false;
     }
   };
 
@@ -113,7 +118,7 @@ export default function PetShop({ open, onClose, onLogin, onBought }: {
               <button type="button" onClick={onLogin} className="mt-1 text-sm font-black underline" style={{ color: C.gold }}>登入後才能用點數購買</button>
             )}
           </div>
-          <button type="button" onClick={onClose} aria-label="關閉" className="w-9 h-9 rounded-full flex items-center justify-center text-xl leading-none hover:bg-[#F7F2EA]" style={{ color: C.sub }}>×</button>
+          <button ref={closeBtn} type="button" onClick={onClose} aria-label="關閉" className="w-9 h-9 rounded-full flex items-center justify-center text-xl leading-none hover:bg-[#F7F2EA]" style={{ color: C.sub }}>×</button>
         </div>
 
         {/* 分頁 */}

@@ -243,7 +243,7 @@ export default function PetCompanion({
   // 白天：一分鐘沒人理就自己出門散步；晚上、太餓或紀念模式：時間到就睡著
   const goWalkRef = useRef<(auto?: boolean) => void>();
   useEffect(() => {
-    if (minimized || hidden) return;
+    if (minimized || hidden || (!desktop && chatOpen)) return;
     const t = window.setInterval(() => {
       if (asleepRef.current || busyRef.current || dragging.current || out !== 'home') return;
       const idle = Date.now() - lastInteract.current;
@@ -253,7 +253,7 @@ export default function PetCompanion({
       if (idle > limit) { asleepRef.current = true; setAsleep(true); }
     }, 5000);
     return () => window.clearInterval(t);
-  }, [minimized, hidden, out, hungry, memorial]);
+  }, [minimized, hidden, out, hungry, memorial, desktop, chatOpen]);
 
   // ---- 點牠 ----
   const onPetClick = async (e: React.MouseEvent<HTMLButtonElement>) => {
@@ -404,7 +404,9 @@ export default function PetCompanion({
     if (!start || !center) { later(); return; }
     void auto;
     lastInteract.current = Date.now();
-    await act('bark', 500, true);
+    busyRef.current = true; // 出門前叫一聲的這半秒不接別的動作
+    try { await act('bark', 500, true); } finally { busyRef.current = false; }
+    if (!mounted.current) return;
     const { createWalker } = await import('@/components/petMapWalker');
     walker.current?.destroy();
     walker.current = createWalker({
@@ -542,7 +544,7 @@ export default function PetCompanion({
             <div key={cat.key} className="relative">
               <button
                 type="button"
-                onPointerDown={e => first && startDrag(e, first, () => setOpenCat(o => (o === cat.key ? null : cat.key)))}
+                onPointerDown={e => { if (out !== 'home') { e.preventDefault(); if (out === 'out') callBack(); setOpenCat(cat.key); return; } if (first) startDrag(e, first, () => setOpenCat(o => (o === cat.key ? null : cat.key))); }}
                 onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpenCat(o => (o === cat.key ? null : cat.key)); } }}
                 aria-expanded={open}
                 aria-label={`${cat.label}，${status}${low ? '，偏低' : ''}`}
