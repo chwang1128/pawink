@@ -29,7 +29,10 @@ model User {
   image         String?
   avatar        String?
   role          Role           @default(PET_OWNER)
-  points        Int            @default(2000)
+  points        Int            @default(100) // 註冊禮 100 點
+  placeReports  PlaceReport[]
+  reportFlags   PlaceReportFlag[]
+  pointLedger   PointLedger[]
   pets          Pet[]
   merchant      Merchant?
   appointments  Appointment[]
@@ -150,4 +153,53 @@ model UsageCounter {
   key       String   @id
   count     Int      @default(0)
   updatedAt DateTime @updatedAt
+}
+
+// 飼主回報：某位飼主對某家店某一題的回答（是／否）。同一人同一店同一題只有一筆，可改答案。
+// placeId 是 Google 地點 ID（Google 條款允許長期保存）。
+model PlaceReport {
+  id        String   @id @default(uuid())
+  placeId   String
+  // 登入者的回報有 userId；未登入的回報為空，靠 voterKey（瀏覽器識別碼）限制一人一票
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  voterKey  String   // 登入者為 u:<userId>，未登入為 a:<瀏覽器識別碼>
+  question  String
+  answer    Boolean
+  onSite    Boolean  @default(false) // 回報時人在店家附近（只比對距離，不保存位置）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([placeId, voterKey, question])
+  @@index([placeId])
+}
+
+// 點數異動紀錄（每一次加點、扣點都留紀錄，方便查帳與防刷）
+model PointLedger {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount    Int
+  reason    String   // 例如 report：飼主回報
+  refId     String?  // 例如對應的 PlaceReport id
+  // pending：確認中（先讓使用者看到，7 天後才入帳）；granted：已入帳；void：回報被多數推翻而取消
+  status      String    @default("granted")
+  availableAt DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@unique([userId, reason, refId]) // 同一筆回報只能發一次點數
+}
+
+// 「這題可能已改變」：飼主覺得某家店某一題的回報過時或有誤
+model PlaceReportFlag {
+  id        String   @id @default(uuid())
+  placeId   String
+  question  String
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([placeId, question, userId])
+  @@index([placeId])
 }

@@ -11,6 +11,7 @@ import {
 import { SERVICE_CATEGORIES, type ServiceCategoryKey } from '@/lib/service-categories';
 import type { GroundingResult } from '@/lib/grounding';
 import GroundedAnswer, { GroundingLoading } from '@/components/GroundedAnswer';
+import OwnerReports from '@/components/OwnerReports';
 
 interface PetProfile {
   name: string;
@@ -58,6 +59,10 @@ interface Store {
   photoUrl: string;
   photoAttributions: { displayName: string; uri: string | null }[];
   detailsToken: string;
+  // Google 地點的主要類型，用來決定飼主回報的題目
+  primaryType?: string | null;
+  // 店家座標的簽章（現場回報用）
+  locToken?: string;
   distanceKm?: number;
   distanceText?: string;
   // AI 查證（Google 地圖 Grounding）的回覆有引用這家店
@@ -157,7 +162,10 @@ const writeGuestPet = (p: PetProfile | null) => {
 const PROVIDER_LABEL: Record<string, string> = { line: '使用 LINE 登入', google: '使用 Google 登入' };
 
 export default function FullMapAIPortal() {
-  const [coins, setCoins] = useState(2000);
+  // 登入者的點數（存在資料庫）；未登入為 null，不顯示
+  const [coins, setCoins] = useState<number | null>(null);
+  // 確認中的點數（飼主回報後 7 天才入帳）
+  const [pendingCoins, setPendingCoins] = useState(0);
   // 預設收起，避免手機先閃出對話框；桌面版掛載後再展開
   const [isAiBoxMinimized, setIsAiBoxMinimized] = useState(true);
   // 手機搜尋後對話框會收起讓出地圖；把 AI 這次的提醒留在按鈕旁，避免看不到（例如誤食時的處置）
@@ -184,6 +192,10 @@ export default function FullMapAIPortal() {
 
   // ---- 帳號與寵物檔案存檔 ----
   const { data: session, status: authStatus } = useSession();
+  useEffect(() => {
+    if (authStatus !== 'authenticated') { setCoins(null); return; }
+    fetch('/api/me').then(r => r.json()).then(j => { setCoins(typeof j.points === 'number' ? j.points : null); setPendingCoins(j.pending || 0); }).catch(() => {});
+  }, [authStatus]);
   const [petId, setPetId] = useState<string | null>(null);
   const [authProviders, setAuthProviders] = useState<string[]>([]);
   const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
@@ -679,6 +691,8 @@ export default function FullMapAIPortal() {
           photoUrl: place.photoUrl || defaultImg,
           photoAttributions: Array.isArray(place.photoAttributions) ? place.photoAttributions : [],
           detailsToken: place.detailsToken || '',
+          primaryType: typeof place.primaryType === 'string' ? place.primaryType : null,
+          locToken: typeof place.locToken === 'string' ? place.locToken : undefined,
           distanceKm,
           distanceText: distanceKm < 1 ? `${Math.round(distanceKm * 1000)}m` : `${distanceKm.toFixed(1)}km`,
         };
@@ -1012,6 +1026,7 @@ export default function FullMapAIPortal() {
                       <div className="px-3 py-2 text-xs text-[#6E5A4D]">
                         <div className="font-black text-[#38312D] text-sm truncate">{session?.user?.name || '已登入'}</div>
                         {session?.user?.email && <div className="truncate">{session.user.email}</div>}
+                        {coins !== null && <div className="mt-1 font-black text-[#B88746]">點數 {coins.toLocaleString()} P{pendingCoins > 0 && <span className="font-bold text-[#A67C52]">（另有 {pendingCoins} P 確認中）</span>}</div>}
                       </div>
                       <button type="button" role="menuitem" onClick={() => signOut()} className="w-full flex items-center px-3 py-2.5 rounded-xl text-sm font-bold text-[#4A423D] hover:bg-[#F7F2EA]">
                         <LogOut className="w-4 h-4 mr-2" />登出
@@ -1038,10 +1053,13 @@ export default function FullMapAIPortal() {
             </div>
           )}
 
-          <div className={`${glassmorphism} hidden md:flex px-4 py-2.5 rounded-full text-sm font-black text-[#B88746] items-center space-x-1.5 bg-[#FFFDF9]`}>
-            <Coins className="w-4 h-4 text-[#C59B63]" />
-            <span className="hidden md:inline">{coins.toLocaleString()} P</span>
-          </div>
+          {coins !== null && (
+            <div title="飼主回報可累積點數" className={`${glassmorphism} hidden md:flex px-4 py-2.5 rounded-full text-sm font-black text-[#B88746] items-center space-x-1.5 bg-[#FFFDF9]`}>
+              <Coins className="w-4 h-4 text-[#C59B63]" />
+              <span className="hidden md:inline">{coins.toLocaleString()} P</span>
+              {pendingCoins > 0 && <span className="hidden md:inline text-[11px] font-bold text-[#A67C52]">＋{pendingCoins} 確認中</span>}
+            </div>
+          )}
         </div>
       </header>
 
@@ -1452,6 +1470,16 @@ export default function FullMapAIPortal() {
                   </a>
                 </div>
               </div>
+
+              <OwnerReports
+                placeId={selectedDetailStore.id}
+                primaryType={selectedDetailStore.primaryType}
+                name={selectedDetailStore.name}
+                place={{ lat: selectedDetailStore.lat, lng: selectedDetailStore.lng, token: selectedDetailStore.locToken }}
+                here={userLocation}
+                onPoints={(p, pending) => { setCoins(p); setPendingCoins(pending); }}
+                onLogin={() => signIn('google')}
+              />
 
               {selectedDetailStore.details && selectedDetailStore.details.reviews.length > 0 && (
                 <div className="px-5 pb-4">
