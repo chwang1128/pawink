@@ -21,3 +21,4 @@ html, body {
 @keyframes petfloat { 0% { transform: translate(-50%, 0) scale(.8); opacity: 1; } 100% { transform: translate(-50%, -46px) scale(1.15); opacity: 0; } }
 @keyframes petsquash { 0% { transform: scale(1, 1); } 30% { transform: scale(1.12, .86); } 60% { transform: scale(.94, 1.08); } 100% { transform: scale(1, 1); } }
 @keyframes petzzz { 0% { transform: translate(0, 0); opacity: 0; } 20% { opacity: .9; } 100% { transform: translate(10px, -26px); opacity: 0; } }
+@keyframes petshake { 0%, 100% { transform: rotate(0); } 25% { transform: rotate(-6deg); } 75% { transform: rotate(6deg); } }

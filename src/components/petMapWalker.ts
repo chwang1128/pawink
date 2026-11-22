@@ -1,7 +1,8 @@
 // 毛孩出門散步：在 Google 地圖上放一個會走動的小毛孩（OverlayView）。
 // 位置用經緯度記錄，所以地圖拖動、縮放時牠會留在原地；走路速度以螢幕像素計，任何縮放看起來都差不多快。
 
-export interface WalkerSprites { walk: string; idle: string; eat: string; petted: string }
+// eat＝在店家門口聞一聞；run＝被叫回來時快跑
+export interface WalkerSprites { walk: string; idle: string; eat: string; petted: string; run: string; sit: string; scratch: string; tilt: string }
 export interface WalkerStop { lat: number; lng: number; name: string }
 export interface Walker {
   recall(containerX: number, containerY: number): Promise<void>;
@@ -40,19 +41,16 @@ export function createWalker(opts: {
   class PetOverlay extends google.maps.OverlayView {
     div: HTMLDivElement | null = null;
     img: HTMLImageElement | null = null;
-    bubble: HTMLDivElement | null = null;
     onAdd() {
       const div = document.createElement('div');
       div.style.cssText = 'position:absolute;width:64px;height:58px;transform:translate(-50%,-100%);cursor:pointer;pointer-events:auto;';
       div.setAttribute('role', 'button');
       div.setAttribute('aria-label', `${opts.name} 正在散步，點一下摸摸牠`);
       div.innerHTML = `
-        <div data-b style="position:absolute;left:50%;bottom:62px;transform:translateX(-50%);white-space:nowrap;font:700 11px system-ui;color:#38312D;background:#fff;border-radius:12px;padding:3px 8px;box-shadow:0 2px 8px rgba(0,0,0,.15);display:none"></div>
         <div style="position:absolute;left:8px;right:8px;bottom:-3px;height:8px;border-radius:50%;background:rgba(56,49,45,.22);filter:blur(2px)"></div>
         <img data-i alt="" draggable="false" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;object-position:bottom;filter:drop-shadow(0 3px 3px rgba(0,0,0,.2))" />`;
       this.div = div;
       this.img = div.querySelector('[data-i]');
-      this.bubble = div.querySelector('[data-b]');
       google.maps.OverlayView.preventMapHitsAndGesturesFrom(div);
       div.addEventListener('click', (e) => { e.stopPropagation(); pet(); });
       this.getPanes().overlayMouseTarget.appendChild(div);
@@ -68,22 +66,16 @@ export function createWalker(opts: {
   ov.setMap(map);
 
   // 圖片原本朝向：walk、eat 朝右；idle 朝左；petted 正面
-  const NATIVE: Record<keyof WalkerSprites, number> = { walk: 1, eat: 1, idle: -1, petted: 0 };
+  const NATIVE: Record<keyof WalkerSprites, number> = { walk: 1, eat: 1, idle: -1, petted: 0, run: 1, sit: 0, scratch: 0, tilt: 0 };
   function setPose(p: keyof WalkerSprites) {
     if (!ov.img) return;
     if (!ov.img.src.endsWith(sprites[p])) ov.img.src = sprites[p];
     const n = NATIVE[p];
     ov.img.style.transform = n !== 0 && n !== facing ? 'scaleX(-1)' : '';
-    ov.img.style.animation = p === 'walk' ? 'petwalk .32s ease-in-out infinite' : '';
+    ov.img.style.animation = p === 'walk' || p === 'run' ? 'petwalk .32s ease-in-out infinite' : '';
   }
-  let bubbleTimer = 0;
-  function say(text: string, ms = 2200) {
-    if (!ov.bubble) return;
-    ov.bubble.textContent = text;
-    ov.bubble.style.display = 'block';
-    window.clearTimeout(bubbleTimer);
-    bubbleTimer = window.setTimeout(() => { if (ov.bubble) ov.bubble.style.display = 'none'; }, ms);
-  }
+  let gait: 'walk' | 'run' = 'walk';
+  let moving = false;
   function hearts() {
     if (!ov.div) return;
     for (let i = 0; i < 3; i++) {
@@ -106,13 +98,15 @@ export function createWalker(opts: {
         const { dx, dy, d } = metersTo(pos, target);
         const stepM = pxPerSec * mpp() * dt;
         const f = Math.abs(dx) > 0.5 ? Math.sign(dx) : facing;
-        if (f !== facing) { facing = f; setPose('walk'); }
-        if (d <= stepM) { pos = { ...target }; ov.draw(); return resolve(); }
+        if (f !== facing) { facing = f; setPose(gait); }
+        if (d <= stepM) { pos = { ...target }; ov.draw(); moving = false; return resolve(); }
         pos = { lat: pos.lat + (dy / d) * stepM / R, lng: pos.lng + (dx / d) * stepM / (R * Math.cos((pos.lat * Math.PI) / 180)) };
         ov.draw();
         raf = requestAnimationFrame(step);
       };
-      setPose('walk');
+      gait = pxPerSec > 150 ? 'run' : 'walk';
+      moving = true;
+      setPose(gait);
       raf = requestAnimationFrame(step);
     });
   }
@@ -121,7 +115,6 @@ export function createWalker(opts: {
   // 散步：在出發點附近亂走，偶爾去附近的店家門口聞一聞
   async function wander() {
     await wait(300);
-    say('出發囉！', 1500);
     // 先跑到散步的地方
     if (metersTo(pos, home).d > 5) await walkTo(home, 140);
     while (alive && !recalling) {
@@ -143,12 +136,12 @@ export function createWalker(opts: {
       await walkTo(target, 46);
       if (!alive || recalling) break;
       if (atStop) {
+        // 在店家門口低頭聞一聞
         setPose('eat');
-        say(`聞聞…${atStop.name.slice(0, 10)}`, 2600);
         await wait(2800);
       } else {
-        setPose('idle');
-        if (Math.random() < 0.25) say(['好多味道！', '這裡好好玩', '汪～', '有鴿子！'][Math.floor(Math.random() * 4)], 1800);
+        const r = Math.random();
+        setPose(r < 0.3 ? 'eat' : r < 0.5 ? 'sit' : r < 0.65 ? 'tilt' : r < 0.75 ? 'scratch' : 'idle');
         await wait(1500 + Math.random() * 2500);
       }
     }
@@ -157,7 +150,8 @@ export function createWalker(opts: {
   function pet() {
     if (recalling) return;
     hearts();
-    say('好舒服～', 1500);
+    setPose('petted');
+    window.setTimeout(() => { if (alive && !recalling) setPose(moving ? gait : 'idle'); }, 1200);
     opts.onPet?.();
   }
 
@@ -169,12 +163,11 @@ export function createWalker(opts: {
       recalling = true;
       window.clearTimeout(timer);
       const ll = ov.getProjection()?.fromContainerPixelToLatLng(new google.maps.Point(cx, cy));
-      say('來了！', 1500);
       if (ll) await walkTo({ lat: ll.lat(), lng: ll.lng() }, 380);
       alive = false;
       ov.setMap(null);
     },
     panTo() { map.panTo(pos); },
-    destroy() { alive = false; cancelAnimationFrame(raf); window.clearTimeout(timer); window.clearTimeout(bubbleTimer); ov.setMap(null); },
+    destroy() { alive = false; cancelAnimationFrame(raf); window.clearTimeout(timer); ov.setMap(null); },
   };
 }
